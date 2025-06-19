@@ -1,4 +1,5 @@
 import { ErrorHandler } from './errorHandler.js';
+import { state } from './state.js';
 
 // 獲取歌曲列表
 export async function fetchSongs() {
@@ -82,6 +83,110 @@ export async function handleUpload(songFile, onProgress, onComplete, onError) {
 }
 
 // 輪詢任務狀態
-async function startPollingStatus(jobId, onProgress, onComplete, onError) {
-    // 實現輪詢邏輯...
+function startPollingStatus(jobId, onProgress, onComplete, onError) {
+    console.log(`[+] 開始輪詢任務狀態: ${jobId}`);
+    
+    // 設置輪詢間隔（秒）
+    const POLLING_INTERVAL = 5000; // 5秒
+    const MAX_RETRIES = 60; // 最多輪詢60次
+    let retries = 0;
+    
+    // 清除之前可能存在的輪詢
+    if (state.pollingInterval) {
+        clearInterval(state.pollingInterval);
+    }
+    
+    // 創建新的輪詢
+    state.pollingInterval = setInterval(() => {
+        pollJobStatus(jobId, retries, MAX_RETRIES, onProgress, onComplete, onError);
+        retries++;
+    }, POLLING_INTERVAL);
+}
+
+// 執行單次輪詢
+async function pollJobStatus(jobId, retries, maxRetries, onProgress, onComplete, onError) {
+    try {
+        console.log(`[i] 輪詢任務狀態 (${retries + 1}/${maxRetries}): ${jobId}`);
+        
+        const response = await fetch(`/status/${jobId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const statusData = await response.json();
+        console.log(`[i] 任務狀態: ${statusData.status}, 進度: ${statusData.progress}%`);
+        
+        // 更新進度
+        updateProgress(statusData, onProgress);
+        
+        // 處理任務狀態
+        handleJobStatus(statusData, retries, maxRetries, jobId, onComplete, onError);
+    } catch (error) {
+        console.error(`[-] 輪詢過程中發生錯誤: ${error.message}`);
+        
+        // 如果達到最大重試次數，則停止
+        if (retries >= maxRetries) {
+            handlePollingTimeout(onError);
+        }
+    }
+}
+
+// 更新進度
+function updateProgress(statusData, onProgress) {
+    if (onProgress) {
+        onProgress({
+            status: 'processing',
+            progress: statusData.progress || 0,
+            message: statusData.message
+        });
+    }
+}
+
+// 處理任務狀態
+function handleJobStatus(statusData, retries, maxRetries, jobId, onComplete, onError) {
+    // 檢查是否完成
+    if (statusData.status === 'completed') {
+        handleJobCompleted(statusData, onComplete);
+    } 
+    // 檢查是否失敗
+    else if (statusData.status === 'failed') {
+        handleJobFailed(statusData, onError);
+    }
+    // 檢查是否超過最大重試次數
+    else if (retries >= maxRetries) {
+        handlePollingTimeout(onError);
+    }
+}
+
+// 處理任務完成
+function handleJobCompleted(statusData, onComplete) {
+    console.log('[✓] 任務處理完成');
+    clearInterval(state.pollingInterval);
+    state.pollingInterval = null;
+    
+    if (onComplete) {
+        onComplete(statusData);
+    }
+}
+
+// 處理任務失敗
+function handleJobFailed(statusData, onError) {
+    console.error(`[-] 任務處理失敗: ${statusData.message}`);
+    clearInterval(state.pollingInterval);
+    state.pollingInterval = null;
+    
+    if (onError) {
+        onError(new Error(statusData.message || '處理失敗'));
+    }
+}
+
+// 處理輪詢超時
+function handlePollingTimeout(onError) {
+    console.error(`[-] 輪詢超時: 已達到最大重試次數`);
+    clearInterval(state.pollingInterval);
+    state.pollingInterval = null;
+    
+    if (onError) {
+        onError(new Error('處理超時，請稍後檢查結果'));
+    }
 }
