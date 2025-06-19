@@ -283,7 +283,11 @@ async function startServer() {
             waitForConnections: true, 
             connectionLimit: 20,
             queueLimit: 0,
-            charset: 'utf8mb4'
+            charset: 'utf8mb4',
+            // 移除不支援的選項: reconnect, timeout, acquireTimeout
+            // 如果需要這些功能，可以使用 mysql2 支援的選項
+            enableKeepAlive: true, // 替代 reconnect
+            connectTimeout: 60000  // 連接超時設定
         });
         const connection = await dbPool.getConnection();
         await connection.ping();

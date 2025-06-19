@@ -10,7 +10,10 @@ const dbPool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    charset: 'utf8mb4'
+    charset: 'utf8mb4',
+    // 移除不支援的選項，改用支援的選項
+    enableKeepAlive: true,
+    connectTimeout: 60000
 });
 
 module.exports = dbPool; 
