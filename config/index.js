@@ -1,16 +1,10 @@
+const config = require('./config');
 const dbPool = require('./dbPool');
 const { validateConfig } = require('./init');
 
-const ai = {
-    spleeterPath: process.env.SPLEETER_PATH || '/home/evalhero/spleeter-py10/bin/spleeter',
-    basicpitchEnv: process.env.BASICPITCH_ENV || 'basicpitch-env',
-    ffmpegPath: process.env.FFMPEG_PATH || '/usr/bin/ffmpeg'
+// 導出所有需要的配置和功能
+module.exports = {
+    ...config,
+    dbPool,
+    validateConfig
 };
-
-const limits = {
-    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024,
-    rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW) || 15 * 60 * 1000,
-    rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX) || 5
-};
-
-module.exports = { dbPool, ai, limits, validateConfig }; 

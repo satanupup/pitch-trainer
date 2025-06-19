@@ -8,63 +8,21 @@ const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
 const { exec } = require('child_process');
-const mysql = require('mysql2/promise');
 const { SpeechClient } = require('@google-cloud/speech');
 // 使用從中間件導入的 performanceMonitor
 const { performanceMonitor } = require('./middleware/performanceMonitor');
 const { errorHandler } = require('./middleware/errorHandler');
-const { validateConfig } = require('./config/init');
+// 從新的配置結構導入
+const { server, db, ai, limits, cache, dbPool, validateConfig } = require('./config');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = server.port;
 
-let dbPool = null;
-const speechClient = new SpeechClient();
+let speechClient = new SpeechClient();
 
-// 從環境變數讀取配置
-const config = {
-    db: {
-        host: process.env.DB_HOST || 'localhost',
-        user: process.env.DB_USER || 'pitchuser',
-        password: process.env.DB_PASSWORD || 'Mypa$$word123!',
-        database: process.env.DB_NAME || 'pitch_trainer',
-        port: process.env.DB_PORT || 3306
-    },
-    ai: {
-        spleeterPath: process.env.SPLEETER_PATH || '/home/evalhero/spleeter-py10/bin/spleeter',
-        basicpitchEnv: process.env.BASICPITCH_ENV || 'basicpitch-env',
-        ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg'
-    },
-    limits: {
-        maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024,
-        rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW) || 15 * 60 * 1000,
-        rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX) || 5
-    },
-    cache: {
-        ttl: parseInt(process.env.CACHE_TTL) || 24 * 60 * 60 * 1000
-    }
-};
-
-// 快取機制
-const cache = new Map();
-const CACHE_TTL = config.cache.ttl;
-
+// 使用從配置導入的設定
 app.use(express.static(path.join(__dirname, 'public')));
-// 使用從中間件導入的 performanceMonitor
 app.use(performanceMonitor);
-
-// 移除這段代碼，因為我們已經從 middleware 導入了 performanceMonitor
-// const customPerformanceMonitor = (req, res, next) => {
-//     const start = Date.now();
-//     res.on('finish', () => {
-//         const duration = Date.now() - start;
-//         console.log(`[📊] ${req.method} ${req.path} - ${duration}ms`);
-//         if (duration > 5000) {
-//             console.warn(`[⚠️] 慢查詢警告: ${req.path} 耗時 ${duration}ms`);
-//         }
-//     });
-//     next();
-// };
 
 // 檔案驗證中間件
 const validateFile = (req, res, next) => {
@@ -77,7 +35,7 @@ const validateFile = (req, res, next) => {
         return res.status(400).json({ error: '不支援的檔案格式，請上傳 MP3、WAV 或 M4A 檔案' });
     }
     
-    const maxSize = config.limits.maxFileSize;
+    const maxSize = limits.maxFileSize;
     if (req.file.size > maxSize) {
         return res.status(400).json({ error: `檔案過大，請上傳小於 ${maxSize / 1024 / 1024}MB 的檔案` });
     }
@@ -87,8 +45,8 @@ const validateFile = (req, res, next) => {
 
 // 簡單的速率限制
 const rateLimit = new Map();
-const RATE_LIMIT_WINDOW = config.limits.rateLimitWindow;
-const RATE_LIMIT_MAX = config.limits.rateLimitMax;
+const RATE_LIMIT_WINDOW = limits.rateLimitWindow;
+const RATE_LIMIT_MAX = limits.rateLimitMax;
 
 const uploadLimiter = (req, res, next) => {
     const clientIP = req.ip || req.connection.remoteAddress;
@@ -117,7 +75,7 @@ const uploadLimiter = (req, res, next) => {
 const upload = multer({ 
     dest: 'uploads/',
     limits: {
-        fileSize: config.limits.maxFileSize,
+        fileSize: limits.maxFileSize,
         files: 1
     }
 });
@@ -273,33 +231,22 @@ async function startServer() {
             console.error('[-] 配置驗證失敗，無法啟動伺服器');
             process.exit(1);
         }
+        
         console.log('[+] 正在建立 MySQL 資料庫連線池...');
-        dbPool = mysql.createPool({ 
-            host: config.db.host, 
-            user: config.db.user, 
-            password: config.db.password, 
-            database: config.db.database, 
-            port: config.db.port,
-            waitForConnections: true, 
-            connectionLimit: 20,
-            queueLimit: 0,
-            charset: 'utf8mb4',
-            // 移除不支援的選項: reconnect, timeout, acquireTimeout
-            // 如果需要這些功能，可以使用 mysql2 支援的選項
-            enableKeepAlive: true, // 替代 reconnect
-            connectTimeout: 60000  // 連接超時設定
-        });
+        // 不需要再創建 dbPool，因為已經從配置導入
+        
         const connection = await dbPool.getConnection();
         await connection.ping();
         connection.release();
         console.log('[✓] MySQL 資料庫連接成功！');
+        
         // --- 關鍵：啟動 HTTP 服務 ---
         app.listen(PORT, () => {
             console.log(`✅ Server running on port ${PORT}`);
             console.log(`[✓] AI 資源製作器後端已啟動於 http://localhost:${PORT}`);
-            console.log(`[✓] 環境: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`[✓] 檔案大小限制: ${config.limits.maxFileSize / 1024 / 1024}MB`);
-            console.log(`[✓] 速率限制: ${config.limits.rateLimitMax} 次/${config.limits.rateLimitWindow / 1000 / 60} 分鐘`);
+            console.log(`[✓] 環境: ${server.env}`);
+            console.log(`[✓] 檔案大小限制: ${limits.maxFileSize / 1024 / 1024}MB`);
+            console.log(`[✓] 速率限制: ${limits.rateLimitMax} 次/${limits.rateLimitWindow / 1000 / 60} 分鐘`);
         });
     } catch (error) {
         console.error('[-] 伺服器啟動失敗:', error);

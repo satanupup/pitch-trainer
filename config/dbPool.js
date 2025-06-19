@@ -1,17 +1,17 @@
 const mysql = require('mysql2/promise');
-require('dotenv').config();
+const config = require('./config');
 
 const dbPool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'pitchuser',
-    password: process.env.DB_PASSWORD || 'Mypa$$word123!',
-    database: process.env.DB_NAME || 'pitch_trainer',
-    port: process.env.DB_PORT || 3306,
+    host: config.db.host,
+    user: config.db.user,
+    password: config.db.password,
+    database: config.db.database,
+    port: config.db.port,
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: config.db.connectionLimit,
     queueLimit: 0,
     charset: 'utf8mb4',
-    // 移除不支援的選項，改用支援的選項
+    // 使用 mysql2 支援的選項
     enableKeepAlive: true,
     connectTimeout: 60000
 });
