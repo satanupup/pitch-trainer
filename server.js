@@ -22,6 +22,11 @@ const app = express();
 // 直接使用環境變數，避免依賴 configModule
 const PORT = process.env.PORT || 3001;
 
+// 確保 config.server.port 與 PORT 一致
+if (config && config.server) {
+    config.server.port = PORT;
+}
+
 // 使用從配置導入的設定
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(performanceMonitor);

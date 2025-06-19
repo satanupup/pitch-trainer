@@ -6,6 +6,13 @@ const config = require('./config');
 function validateConfig() {
     const errors = [];
     
+    // 檢查伺服器配置
+    if (!config.server || !config.server.port) {
+        console.warn('[⚠️] 警告: 未設定伺服器端口，使用預設值 3001');
+        if (!config.server) config.server = {};
+        config.server.port = 3001;
+    }
+    
     // 檢查資料庫配置
     if (!config.db.password) {
         console.warn('[⚠️] 警告: 未設定資料庫密碼，使用預設值');
