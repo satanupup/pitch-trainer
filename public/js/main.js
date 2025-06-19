@@ -1,6 +1,6 @@
-import { fetchSongs, handleUpload, startPollingStatus } from './modules/api.js';
-import { elements, updateSongListUI, updateScoringDisplay, updateRangeMatch } from './modules/ui.js';
-import { initializeAudioAndLoadSong, loadSong, startPitchDetection, stopPitchDetection, startRecording, stopRecording } from './modules/audio.js';
+import { fetchSongs, handleUpload } from './modules/api.js';
+import { elements, updateSongListUI, updateScoringDisplay } from './modules/ui.js';
+import { initializeAudioAndLoadSong, startPitchDetection, stopPitchDetection } from './modules/audio.js';
 import { init as initVisualizer } from './modules/visualizer.js';
 import { state } from './modules/state.js';
 import { PitchScoring } from './modules/scoring.js';
@@ -76,11 +76,37 @@ class App {
   }
 
   handlePlaySong() {
-    if (!state.player?.loaded) return alert('請先選擇歌曲並等待載入完成。');
-    if (window.Tone && Tone.Transport.state !== 'started') {
-      Tone.Transport.start();
-    } else if (window.Tone) {
-      Tone.Transport.stop();
+    if (!state.player?.loaded) {
+      ErrorHandler.showError('請先選擇歌曲並等待載入完成。');
+      return;
+    }
+    
+    try {
+      if (window.Tone && Tone.Transport.state !== 'started') {
+        // 確保音頻上下文已啟動
+        Tone.start().then(() => {
+          console.log('[✓] Tone.js 音頻上下文已啟動');
+          // 開始播放
+          if (state.player.tonePlayer) {
+            state.player.tonePlayer.start();
+          }
+          Tone.Transport.start();
+          elements.playSongBtn.textContent = '停止';
+        }).catch(err => {
+          console.error('[-] 無法啟動 Tone.js 音頻上下文:', err);
+          ErrorHandler.showError('播放失敗，請點擊頁面再試。');
+        });
+      } else if (window.Tone) {
+        // 停止播放
+        if (state.player.tonePlayer) {
+          state.player.tonePlayer.stop();
+        }
+        Tone.Transport.stop();
+        elements.playSongBtn.textContent = '播放';
+      }
+    } catch (err) {
+      console.error('[-] 播放/停止時發生錯誤:', err);
+      ErrorHandler.showError(`播放失敗: ${err.message}`);
     }
   }
 
