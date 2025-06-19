@@ -8,7 +8,7 @@ const util = require('util');
 const execPromise = util.promisify(exec);
 
 // --- 您需要修改的參數 ---
-const BUCKET_NAME = 'YOUR_UNIQUE_BUCKET_NAME'; // <<<<<<< 請換成您剛剛建立的 GCS 儲存桶名稱
+const BUCKET_NAME = 'pitch-trainer-bucket-961211674033';
 const localFilePath = '/var/www/pitch-trainer/uploads/1750322419630-16664692.mp3';
 // -----------------------
 
