@@ -281,11 +281,8 @@ async function startServer() {
             database: config.db.database, 
             port: config.db.port,
             waitForConnections: true, 
-            connectionLimit: 20,        // 增加連接數
+            connectionLimit: 20,
             queueLimit: 0,
-            acquireTimeout: 60000,      // 增加超時時間
-            timeout: 60000,
-            reconnect: true,
             charset: 'utf8mb4'
         });
         const connection = await dbPool.getConnection();
