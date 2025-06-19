@@ -1,0 +1,61 @@
+# ============================================
+# AI 音準資源製作器 - Git 忽略檔案
+# ============================================
+
+# 依賴套件
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 環境變數檔案
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 暫存檔案
+uploads/
+temp_processing/
+*.tmp
+*.temp
+
+# 日誌檔案
+logs/
+*.log
+
+# 資料庫備份
+*.sql
+backup_*.sql
+
+# 音訊檔案 (除了範例)
+public/music/*.mp3
+public/music/*.wav
+public/music/*.m4a
+!public/music/your-song.mp3
+
+# 處理後的歌曲檔案
+public/songs/
+
+# 系統檔案
+.DS_Store
+Thumbs.db
+
+# IDE 檔案
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 測試覆蓋率
+coverage/
+.nyc_output/
+
+# 建置檔案
+dist/
+build/
+
+# 快取檔案
+.cache/
+.parcel-cache/ 
