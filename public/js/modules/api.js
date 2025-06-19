@@ -127,4 +127,4 @@ function startPollingStatus(jobId, onProgress, onComplete, onError) {
     }, 2000); // 每 2 秒輪詢一次
 }
 
-export { handleUpload }; 
+// 確保沒有重複導出 handleUpload
