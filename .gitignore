@@ -60,3 +60,5 @@ build/
 .cache/
 .parcel-cache/ Miniconda3-latest-Linux-x86_64.sh
 pretrained_models/
+Miniconda3-latest-Linux-x86_64.sh
+pretrained_models/
