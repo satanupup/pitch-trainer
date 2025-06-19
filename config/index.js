@@ -1,4 +1,4 @@
-// 不要引入 init.js，避免循環依賴
+// 簡化 index.js，避免循環依賴
 const config = require('./config');
 const dbPool = require('./dbPool');
 
@@ -6,4 +6,5 @@ const dbPool = require('./dbPool');
 module.exports = {
     ...config,
     dbPool
+    // 不要在這裡引入 validateConfig
 };
