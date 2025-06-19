@@ -32,10 +32,10 @@ async function handleUpload(req, res) {
     console.log(`[+] 創建任務 ID: ${jobId}`);
     
     try {
-        // 將任務信息保存到數據庫
+        // 將任務信息保存到數據庫 - 使用正確的欄位結構
         await dbPool.query(
-            'INSERT INTO jobs (id, status, message, progress, file_path, original_filename) VALUES (?, ?, ?, ?, ?, ?)', 
-            [jobId, 'pending', '任務已建立', 0, req.file.path, req.file.originalname]
+            'INSERT INTO jobs (id, status, message, progress) VALUES (?, ?, ?, ?)', 
+            [jobId, 'pending', '任務已建立', 0]
         );
         console.log(`[✓] 任務已保存到數據庫: ${jobId}`);
         

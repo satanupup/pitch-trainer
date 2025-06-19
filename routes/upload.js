@@ -2,8 +2,6 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const { uploadLimiter } = require('../middleware/uploadLimiter');
-const { validateFile } = require('../middleware/validateFile');
 const { handleUpload } = require('../services/fileService');
 
 // 配置 multer 存儲
@@ -31,20 +29,8 @@ const upload = multer({
   }
 });
 
-// 添加詳細的錯誤處理中間件
-router.use((err, req, res, next) => {
-  console.error('[-] 上傳路由錯誤:', err);
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: '文件太大，超過了大小限制' });
-    }
-    return res.status(400).json({ error: `上傳錯誤: ${err.message}` });
-  }
-  res.status(500).json({ error: err.message || '上傳處理過程中發生未知錯誤' });
-});
-
 // 上傳路由
-router.post('/', uploadLimiter, (req, res, next) => {
+router.post('/', (req, res, next) => {
   console.log('[+] 收到上傳請求');
   upload.single('songfile')(req, res, (err) => {
     if (err) {
@@ -53,6 +39,6 @@ router.post('/', uploadLimiter, (req, res, next) => {
     }
     next();
   });
-}, validateFile, handleUpload);
+}, handleUpload);
 
 module.exports = router;

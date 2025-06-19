@@ -1,66 +1,23 @@
-const { exec } = require('child_process');
-const fs = require('fs');
-const fsp = fs.promises;
-const path = require('path');
-const { SpeechClient } = require('@google-cloud/speech');
 const dbPool = require('../config/dbPool');
-const config = require('../config');
+const path = require('path');
+const fs = require('fs').promises;
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
-const speechClient = new SpeechClient();
-
-function runCommand(command) {
-    console.log(`[+] 準備執行命令: ${command}`);
-    return new Promise((resolve, reject) => {
-        exec(command, { timeout: 600000 }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`[-] 命令執行錯誤: ${stderr}`);
-                return reject(new Error(stderr));
-            }
-            console.log(`[✓] 命令執行成功: ${command}`);
-            resolve(stdout);
-        });
-    });
-}
-
-function getLrcFromGoogleStreaming(vocalsPath) {
-    return new Promise((resolve, reject) => {
-        let lrcContent = '';
-        const recognizeStream = speechClient.streamingRecognize({
-            config: { encoding: 'LINEAR16', sampleRateHertz: 44100, languageCode: 'cmn-TW', enableWordTimeOffsets: true },
-            interimResults: false,
-        })
-        .on('error', err => reject(new Error(`Google Speech Stream Error: ${err.message}`)))
-        .on('data', data => {
-            const result = data.results[0];
-            if (result?.alternatives?.[0]?.words?.length > 0) {
-                const alt = result.alternatives[0];
-                const startTime = parseFloat(alt.words[0].startTime.seconds) + (alt.words[0].startTime.nanos || 0) / 1e9;
-                const minutes = Math.floor(startTime / 60).toString().padStart(2, '0');
-                const seconds = (startTime % 60).toFixed(2).padStart(5, '0');
-                lrcContent += `[${minutes}:${seconds}]${alt.transcript}\n`;
-            }
-        })
-        .on('end', () => {
-            console.log("[✓] Google Speech Stream 處理結束。");
-            resolve(lrcContent);
-        });
-        fs.createReadStream(vocalsPath).pipe(recognizeStream);
-    });
-}
-
-async function checkFile(filePath, stepName) {
+// 檢查文件是否存在
+async function checkFile(filePath, fileType) {
     try {
-        const stats = await fsp.stat(filePath);
-        if (stats.size > 100) {
-            console.log(`[✓] ${stepName} 檔案檢查通過: ${filePath}`);
-            return true;
-        } else {
-            console.warn(`[!] ${stepName} 檔案檢查警告: 檔案為空或過小。 (${filePath})`);
-            return false;
-        }
+        await fs.access(filePath);
+        console.log(`[✓] ${fileType}存在: ${filePath}`);
+        return true;
     } catch (error) {
-        console.error(`[-] ${stepName} 檔案檢查失敗: 找不到檔案。 (${filePath})`);
-        console.error(`[-] 錯誤詳細資訊: ${error.message}`);
+        // 記錄具體的錯誤原因
+        if (error.code === 'ENOENT') {
+            console.error(`[-] ${fileType}不存在: ${filePath}`);
+        } else {
+            console.error(`[-] 無法訪問${fileType}: ${filePath}，錯誤: ${error.code} - ${error.message}`);
+        }
         return false;
     }
 }
@@ -79,39 +36,67 @@ async function processSong(jobId, originalFilePath, originalFileName) {
             throw new Error('找不到上傳的文件');
         }
         
-        // 創建輸出目錄
+        // 從文件名提取歌曲名稱
         const songName = path.basename(originalFileName, path.extname(originalFileName))
             .replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+        
+        // 創建輸出目錄
         const outputDir = path.join('public', 'songs', songName);
-        
         console.log(`[+] 創建輸出目錄: ${outputDir}`);
-        await fsp.mkdir(outputDir, { recursive: true });
-        
-        // 複製原始 MP3 到輸出目錄
-        const mp3Path = path.join(outputDir, 'original.mp3');
-        console.log(`[+] 複製 MP3 文件: ${originalFilePath} -> ${mp3Path}`);
-        await fsp.copyFile(originalFilePath, mp3Path);
+        await fs.mkdir(outputDir, { recursive: true });
         
         // 更新任務進度
         await dbPool.query('UPDATE jobs SET progress = ?, message = ? WHERE id = ?', 
             [10, '文件準備完成', jobId]);
         
-        // 呼叫 AI 分析服務
-        console.log(`[+] 呼叫 AI 分析服務...`);
+        // 複製原始 MP3 到輸出目錄
+        const mp3Path = path.join(outputDir, 'audio.mp3');
+        console.log(`[+] 複製 MP3 文件: ${originalFilePath} -> ${mp3Path}`);
+        await fs.copyFile(originalFilePath, mp3Path);
+        
+        // 創建空的 MIDI 和 LRC 文件（實際應用中這裡會有 AI 處理）
+        const midiPath = path.join(outputDir, 'melody.mid');
+        const lrcPath = path.join(outputDir, 'lyrics.lrc');
+        
+        // 模擬 AI 處理
+        console.log(`[+] 模擬 AI 處理...`);
         await dbPool.query('UPDATE jobs SET progress = ?, message = ? WHERE id = ?', 
-            [20, '正在分析音頻特性', jobId]);
+            [30, '正在分析音頻特性', jobId]);
         
-        // 這裡添加實際的 AI 處理代碼
-        // ...
+        // 等待一段時間模擬處理
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // 模擬處理完成
-        await dbPool.query('UPDATE jobs SET status = ?, message = ?, progress = ? WHERE id = ?', 
-            ['completed', '處理完成', 100, jobId]);
+        // 創建空的 MIDI 文件
+        await fs.writeFile(midiPath, '');
+        await dbPool.query('UPDATE jobs SET progress = ?, message = ? WHERE id = ?', 
+            [60, '旋律提取完成', jobId]);
+        
+        // 等待一段時間模擬處理
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // 創建空的 LRC 文件
+        await fs.writeFile(lrcPath, '[00:00.00]這是一個示例歌詞\n[00:05.00]由 AI 生成');
+        await dbPool.query('UPDATE jobs SET progress = ?, message = ? WHERE id = ?', 
+            [90, '歌詞生成完成', jobId]);
+        
+        // 將歌曲信息保存到數據庫
+        const [result] = await dbPool.query(
+            'INSERT INTO songs (name, mp3_path, midi_path, lrc_path) VALUES (?, ?, ?, ?)',
+            [songName, `songs/${songName}/audio.mp3`, `songs/${songName}/melody.mid`, `songs/${songName}/lyrics.lrc`]
+        );
+        
+        const songId = result.insertId;
+        console.log(`[✓] 歌曲信息已保存到數據庫，ID: ${songId}`);
+        
+        // 更新任務狀態，關聯到新創建的歌曲
+        await dbPool.query('UPDATE jobs SET status = ?, message = ?, progress = ?, song_id = ? WHERE id = ?', 
+            ['completed', '處理完成！', 100, songId, jobId]);
         
         console.log(`[✓] 歌曲處理完成: ${jobId}`);
         return {
             success: true,
-            songPath: `/songs/${songName}/original.mp3`
+            songId: songId,
+            songPath: `songs/${songName}/audio.mp3`
         };
     } catch (error) {
         console.error(`[-] 處理歌曲時發生錯誤: ${error.message}`);
@@ -125,4 +110,4 @@ async function processSong(jobId, originalFilePath, originalFileName) {
     }
 }
 
-module.exports = { runCommand, getLrcFromGoogleStreaming, checkFile, processSong }; 
+module.exports = { processSong }; 

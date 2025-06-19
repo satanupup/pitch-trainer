@@ -8,15 +8,33 @@ async function getSongs() {
 }
 
 async function getJobStatus(jobId) {
-    const [rows] = await dbPool.query('SELECT * FROM jobs WHERE id = ?', [jobId]);
+    const [rows] = await dbPool.query(`
+        SELECT j.*, s.name, s.mp3_path, s.midi_path, s.lrc_path 
+        FROM jobs j 
+        LEFT JOIN songs s ON j.song_id = s.id 
+        WHERE j.id = ?
+    `, [jobId]);
+    
     if (rows.length === 0) return null;
-    let jobData = rows[0];
+    
+    const jobData = rows[0];
+    
+    // 如果任務已完成且有關聯的歌曲，添加歌曲信息
     if (jobData.status === 'completed' && jobData.song_id) {
-        const [songRows] = await dbPool.query('SELECT name, mp3_path, midi_path, lrc_path FROM songs WHERE id = ?', [jobData.song_id]);
-        if(songRows.length > 0) {
-            jobData.song = { name: songRows[0].name, mp3: songRows[0].mp3_path, midi: songRows[0].midi_path, lrc: songRows[0].lrc_path };
-        }
+        jobData.song = {
+            name: jobData.name,
+            mp3: jobData.mp3_path,
+            midi: jobData.midi_path,
+            lrc: jobData.lrc_path
+        };
     }
+    
+    // 刪除不需要的欄位
+    delete jobData.name;
+    delete jobData.mp3_path;
+    delete jobData.midi_path;
+    delete jobData.lrc_path;
+    
     return jobData;
 }
 

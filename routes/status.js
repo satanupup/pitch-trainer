@@ -2,14 +2,22 @@ const express = require('express');
 const router = express.Router();
 const { getJobStatus } = require('../services/songService');
 
+// 獲取任務狀態
 router.get('/:jobId', async (req, res) => {
     try {
-        const job = await getJobStatus(req.params.jobId);
-        if (!job) return res.status(404).json({ error: '找不到該任務' });
-        res.json(job);
+        const jobId = req.params.jobId;
+        console.log(`[+] 獲取任務狀態: ${jobId}`);
+        
+        const jobStatus = await getJobStatus(jobId);
+        
+        if (!jobStatus) {
+            return res.status(404).json({ error: '找不到指定的任務' });
+        }
+        
+        res.json(jobStatus);
     } catch (error) {
-        console.error(`[-] API /status/${req.params.jobId} 錯誤:`, error);
-        res.status(500).json({ error: '無法查詢任務狀態' });
+        console.error('[-] 獲取任務狀態失敗:', error);
+        res.status(500).json({ error: '獲取任務狀態失敗: ' + error.message });
     }
 });
 
