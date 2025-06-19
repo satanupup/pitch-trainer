@@ -14,12 +14,12 @@ const { performanceMonitor } = require('./middleware/performanceMonitor');
 const { errorHandler } = require('./middleware/errorHandler');
 
 // 配置
-const configModule = require('./config');
-// 直接從 init.js 引入 validateConfig
-const { validateConfig } = require('./config/init');
+const config = require('./config/config');  // 直接引入 config.js
+const dbPool = require('./config/dbPool');  // 直接引入 dbPool.js
+const { validateConfig } = require('./config/init');  // 直接引入 validateConfig
 
 const app = express();
-const PORT = configModule.server.port;
+const PORT = process.env.PORT || 3001;  // 直接使用環境變數
 
 // 使用從配置導入的設定
 app.use(express.static(path.join(__dirname, 'public')));
@@ -45,7 +45,7 @@ async function startServer() {
         
         console.log('[+] 正在建立 MySQL 資料庫連線池...');
         
-        const connection = await configModule.dbPool.getConnection();
+        const connection = await dbPool.getConnection();
         await connection.ping();
         connection.release();
         console.log('[✓] MySQL 資料庫連接成功！');
@@ -54,9 +54,9 @@ async function startServer() {
         app.listen(PORT, () => {
             console.log(`✅ Server running on port ${PORT}`);
             console.log(`[✓] AI 資源製作器後端已啟動於 http://localhost:${PORT}`);
-            console.log(`[✓] 環境: ${configModule.server.env}`);
-            console.log(`[✓] 檔案大小限制: ${configModule.limits.maxFileSize / 1024 / 1024}MB`);
-            console.log(`[✓] 速率限制: ${configModule.limits.rateLimitMax} 次/${configModule.limits.rateLimitWindow / 1000 / 60} 分鐘`);
+            console.log(`[✓] 環境: ${process.env.NODE_ENV || 'development'}`);
+            console.log(`[✓] 檔案大小限制: ${config.limits.maxFileSize / 1024 / 1024}MB`);
+            console.log(`[✓] 速率限制: ${config.limits.rateLimitMax} 次/${config.limits.rateLimitWindow / 1000 / 60} 分鐘`);
         });
     } catch (error) {
         console.error('[-] 伺服器啟動失敗:', error);

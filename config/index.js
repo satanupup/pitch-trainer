@@ -6,5 +6,4 @@ const dbPool = require('./dbPool');
 module.exports = {
     ...config,
     dbPool
-    // 不要在這裡引入 validateConfig
 };
