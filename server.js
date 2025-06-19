@@ -19,7 +19,8 @@ const dbPool = require('./config/dbPool');  // 直接引入 dbPool.js
 const { validateConfig } = require('./config/init');  // 直接引入 validateConfig
 
 const app = express();
-const PORT = process.env.PORT || 3001;  // 直接使用環境變數
+// 直接使用環境變數，避免依賴 configModule
+const PORT = process.env.PORT || 3001;
 
 // 使用從配置導入的設定
 app.use(express.static(path.join(__dirname, 'public')));

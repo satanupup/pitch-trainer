@@ -12,11 +12,27 @@ function validateConfig() {
     }
     
     // 檢查 AI 工具路徑
-    if (!fs.existsSync(config.ai.spleeterPath)) {
-        errors.push(`Spleeter 路徑不存在: ${config.ai.spleeterPath}`);
+    if (!config.ai.spleeterPath) {
+        console.warn('[⚠️] 警告: 未設定 Spleeter 路徑，使用預設值');
+    } else if (!fs.existsSync(config.ai.spleeterPath)) {
+        console.warn(`[⚠️] 警告: Spleeter 路徑不存在: ${config.ai.spleeterPath}`);
     }
-    if (!fs.existsSync(config.ai.ffmpegPath)) {
-        errors.push(`FFmpeg 路徑不存在: ${config.ai.ffmpegPath}`);
+    
+    if (!config.ai.ffmpegPath) {
+        console.warn('[⚠️] 警告: 未設定 FFmpeg 路徑，使用預設值');
+    } else if (!fs.existsSync(config.ai.ffmpegPath)) {
+        console.warn(`[⚠️] 警告: FFmpeg 路徑不存在: ${config.ai.ffmpegPath}`);
+        // 嘗試尋找系統中的 ffmpeg
+        try {
+            const { execSync } = require('child_process');
+            const ffmpegPath = execSync('which ffmpeg').toString().trim();
+            if (ffmpegPath) {
+                console.log(`[✓] 找到系統 FFmpeg: ${ffmpegPath}`);
+                config.ai.ffmpegPath = ffmpegPath;
+            }
+        } catch (err) {
+    console.warn('[⚠️] 無法在系統中找到 FFmpeg', err);
+}
     }
     
     // 檢查並創建必要的目錄
