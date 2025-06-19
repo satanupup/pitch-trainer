@@ -13,29 +13,26 @@ const { SpeechClient } = require('@google-cloud/speech');
 const { performanceMonitor } = require('./middleware/performanceMonitor');
 const { errorHandler } = require('./middleware/errorHandler');
 
-// 配置
-let config = require('./config/config');  // 使用 let 而不是 const
+// 1. 從 ./config/config.js 直接載入原始設定
+const config = require('./config/config');
 console.log('Config loaded:', config);
-console.log('Config server:', config?.server);
 
-const dbPool = require('./config/dbPool');  // 直接引入 dbPool.js
-const { validateConfig } = require('./config/init');  // 直接引入 validateConfig
+// 2. 載入驗證函數和資料庫連線池
+const { validateConfig } = require('./config/init');
+const dbPool = require('./config/dbPool');
 
 const app = express();
 // 直接使用環境變數，避免依賴 configModule
 const PORT = process.env.PORT || 3001;
 
+// 3. 在啟動伺服器之前，先驗證設定
+//    將 config 物件傳遞給驗證函數
+if (!validateConfig(config)) {
+    console.error('[-] 配置驗證失敗，無法啟動伺服器');
+    process.exit(1);
+}
+
 // 確保 config.server.port 與 PORT 一致
-if (!config) {
-    console.error('Config is undefined!');
-    config = {};
-}
-
-if (!config.server) {
-    console.error('Config.server is undefined!');
-    config.server = {};
-}
-
 config.server.port = PORT;
 
 // 使用從配置導入的設定
@@ -54,11 +51,6 @@ app.use(errorHandler);
 async function startServer() {
     try {
         console.log('[+] 開始啟動 AI 音準資源製作器...');
-        // 驗證配置
-        if (!validateConfig()) {
-            console.error('[-] 配置驗證失敗，無法啟動伺服器');
-            process.exit(1);
-        }
         
         console.log('[+] 正在建立 MySQL 資料庫連線池...');
         

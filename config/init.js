@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-// 直接引入 config.js 而不是 index.js
-let config = require('./config');  // 使用 let 而不是 const
 
-function validateServerConfig() {
+// 注意：這裡不再有 require('./config')
+// 所有的 validate 函數都接收一個 config 物件作為參數
+
+function validateServerConfig(config) {
     if (!config?.server?.port) {
         console.warn('[⚠️] 警告: 未設定伺服器端口，使用預設值 3001');
         if (!config) config = {};
@@ -13,14 +14,14 @@ function validateServerConfig() {
     return true;
 }
 
-function validateDatabaseConfig() {
+function validateDatabaseConfig(config) {
     if (!config.db?.password) {
         console.warn('[⚠️] 警告: 未設定資料庫密碼，使用預設值');
     }
     return true;
 }
 
-function validateAIToolsConfig() {
+function validateAIToolsConfig(config) {
     const errors = [];
     
     // 檢查 Spleeter 路徑
@@ -31,12 +32,12 @@ function validateAIToolsConfig() {
     }
     
     // 檢查 FFmpeg 路徑
-    validateFFmpegPath();
+    validateFFmpegPath(config);
     
     return errors;
 }
 
-function validateFFmpegPath() {
+function validateFFmpegPath(config) {
     if (!config.ai?.ffmpegPath) {
         console.warn('[⚠️] 警告: 未設定 FFmpeg 路徑，使用預設值');
         return;
@@ -44,11 +45,11 @@ function validateFFmpegPath() {
     
     if (!fs.existsSync(config.ai.ffmpegPath)) {
         console.warn(`[⚠️] 警告: FFmpeg 路徑不存在: ${config.ai.ffmpegPath}`);
-        tryFindSystemFFmpeg();
+        tryFindSystemFFmpeg(config);
     }
 }
 
-function tryFindSystemFFmpeg() {
+function tryFindSystemFFmpeg(config) {
     try {
         const { execSync } = require('child_process');
         const ffmpegPath = execSync('which ffmpeg').toString().trim();
@@ -57,11 +58,11 @@ function tryFindSystemFFmpeg() {
             config.ai.ffmpegPath = ffmpegPath;
         }
     } catch (err) {
-        handleFFmpegNotFound(err);
+        handleFFmpegNotFound(config, err);
     }
 }
 
-function handleFFmpegNotFound(err) {
+function handleFFmpegNotFound(config, err) {
     console.warn('[⚠️] 無法在系統中找到 FFmpeg:', err.message);
     if (config.ai) {
         config.ai.ffmpegPath = 'ffmpeg';  // 使用預設命令名稱
@@ -69,7 +70,7 @@ function handleFFmpegNotFound(err) {
     }
 }
 
-function validateDirectories() {
+function validateDirectories(config) {
     const errors = [];
     const dirs = [
         { name: 'uploads', path: config.paths?.uploads || 'uploads' },
@@ -92,16 +93,16 @@ function validateDirectories() {
     return errors;
 }
 
-function validateConfig() {
+function validateConfig(config) {
     const errors = [];
     
-    // 執行各項驗證
-    validateServerConfig();
-    validateDatabaseConfig();
+    // 執行各項驗證，並將 config 物件傳遞下去
+    validateServerConfig(config);
+    validateDatabaseConfig(config);
     
     // 收集可能的錯誤
-    const aiErrors = validateAIToolsConfig();
-    const dirErrors = validateDirectories();
+    const aiErrors = validateAIToolsConfig(config);
+    const dirErrors = validateDirectories(config);
     
     errors.push(...aiErrors, ...dirErrors);
     
