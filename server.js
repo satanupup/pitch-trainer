@@ -14,7 +14,10 @@ const { performanceMonitor } = require('./middleware/performanceMonitor');
 const { errorHandler } = require('./middleware/errorHandler');
 
 // 配置
-const config = require('./config/config');  // 直接引入 config.js
+let config = require('./config/config');  // 使用 let 而不是 const
+console.log('Config loaded:', config);
+console.log('Config server:', config?.server);
+
 const dbPool = require('./config/dbPool');  // 直接引入 dbPool.js
 const { validateConfig } = require('./config/init');  // 直接引入 validateConfig
 
@@ -23,9 +26,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // 確保 config.server.port 與 PORT 一致
-if (config && config.server) {
-    config.server.port = PORT;
+if (!config) {
+    console.error('Config is undefined!');
+    config = {};
 }
+
+if (!config.server) {
+    console.error('Config.server is undefined!');
+    config.server = {};
+}
+
+config.server.port = PORT;
 
 // 使用從配置導入的設定
 app.use(express.static(path.join(__dirname, 'public')));
