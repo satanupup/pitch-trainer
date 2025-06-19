@@ -19,21 +19,61 @@ async function handleUpload(songFile, onProgress, onComplete, onError) {
         ErrorHandler.showError('請先選擇一個 MP3 檔案');
         return;
     }
+    
+    console.log(`[+] 開始上傳文件: ${songFile.name}, 大小: ${songFile.size} 字節`);
+    
     const formData = new FormData();
     formData.append('songfile', songFile);
+    
     try {
+        // 顯示上傳進度
+        if (onProgress) onProgress({ status: 'uploading', progress: 0 });
+        console.log('[+] 正在發送上傳請求...');
+        
         const response = await ErrorHandler.retry(async () => {
-            const res = await fetch('/upload', { method: 'POST', body: formData });
+            const res = await fetch('/upload', { 
+                method: 'POST', 
+                body: formData,
+                // 不設置超時，因為處理大文件可能需要時間
+                // 添加進度事件處理
+                onUploadProgress: (progressEvent) => {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    console.log(`[i] 上傳進度: ${percentCompleted}%`);
+                    if (onProgress) onProgress({ status: 'uploading', progress: percentCompleted });
+                }
+            });
+            
             if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.error || `HTTP ${res.status}`);
+                let errorMessage = `HTTP ${res.status}`;
+                try {
+                    const errorData = await res.json();
+                    errorMessage = errorData.error || errorMessage;
+                } catch (e) {
+                    // 如果無法解析 JSON，使用狀態文本
+                    errorMessage = `${errorMessage} - ${res.statusText}`;
+                }
+                console.error(`[-] 上傳請求失敗: ${errorMessage}`);
+                throw new Error(errorMessage);
             }
+            
+            console.log('[✓] 上傳請求成功');
             return res;
         });
+        
         const result = await response.json();
-        if (onComplete) onComplete(result);
+        console.log('[✓] 上傳結果:', result);
+        
+        // 如果有 jobId，開始輪詢狀態
+        if (result.jobId) {
+            console.log(`[+] 開始輪詢任務狀態: ${result.jobId}`);
+            startPollingStatus(result.jobId, onProgress, onComplete, onError);
+        } else if (onComplete) {
+            onComplete(result);
+        }
+        
         return result;
     } catch (error) {
+        console.error(`[-] 上傳過程中發生錯誤: ${error.message}`);
         if (onError) onError(error);
         ErrorHandler.showError(`上傳失敗: ${error.message}`);
     }

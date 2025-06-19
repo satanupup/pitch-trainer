@@ -31,11 +31,65 @@ class App {
 
   async handleUpload(event) {
     event.preventDefault();
+    console.log('[+] 表單提交，開始處理上傳...');
+    
     const file = elements.songFile.files[0];
-    await handleUpload(file, null, (result) => {
-      // 上傳成功後自動刷新歌曲清單
-      this.refreshSongList(result.song?.mp3);
-    });
+    if (!file) {
+      ErrorHandler.showError('請先選擇一個 MP3 檔案');
+      return;
+    }
+    
+    console.log(`[+] 選擇的文件: ${file.name}, 大小: ${file.size} 字節, 類型: ${file.type}`);
+    
+    // 顯示進度區域
+    elements.progressArea.classList.remove('hidden');
+    elements.progressBar.style.width = '0%';
+    elements.uploadStatus.textContent = '準備上傳...';
+    
+    // 禁用上傳按鈕，防止重複提交
+    elements.uploadBtn.disabled = true;
+    
+    try {
+      await handleUpload(
+        file,
+        // 進度回調
+        (progressData) => {
+          console.log(`[i] 上傳進度更新: ${JSON.stringify(progressData)}`);
+          if (progressData.status === 'uploading') {
+            elements.progressBar.style.width = `${progressData.progress}%`;
+            elements.uploadStatus.textContent = `上傳中... ${progressData.progress}%`;
+          } else if (progressData.status === 'processing') {
+            elements.progressBar.style.width = `${progressData.progress}%`;
+            elements.uploadStatus.textContent = progressData.message || '處理中...';
+          }
+        },
+        // 完成回調
+        (result) => {
+          console.log('[✓] 上傳和處理完成:', result);
+          elements.progressBar.style.width = '100%';
+          elements.uploadStatus.textContent = '處理完成！';
+          elements.uploadBtn.disabled = false;
+          
+          // 上傳成功後自動刷新歌曲清單
+          setTimeout(() => {
+            this.refreshSongList(result.song?.mp3);
+            // 隱藏進度區域
+            elements.progressArea.classList.add('hidden');
+          }, 2000);
+        },
+        // 錯誤回調
+        (error) => {
+          console.error(`[-] 上傳或處理過程中發生錯誤: ${error.message}`);
+          elements.uploadStatus.textContent = `錯誤: ${error.message}`;
+          elements.uploadBtn.disabled = false;
+          // 保持進度區域可見，以便用戶看到錯誤信息
+        }
+      );
+    } catch (error) {
+      console.error(`[-] 處理上傳時發生異常: ${error.message}`);
+      elements.uploadStatus.textContent = `錯誤: ${error.message}`;
+      elements.uploadBtn.disabled = false;
+    }
   }
 
   async refreshSongList(selectMp3) {
