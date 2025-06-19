@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { ErrorHandler } from './errorHandler.js';
+import { elements } from './ui.js';
 
 async function initializeAudioAndLoadSong(songData) {
     if (!state.isAudioInitialized) {
