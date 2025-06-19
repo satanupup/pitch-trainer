@@ -231,10 +231,32 @@ async function generateLyrics(vocalPath, outputDir) {
         await execPromise(`${ffmpegPath} -i "${vocalPath}" -af "highpass=f=200,lowpass=f=3000,afftdn=nf=-25,dynaudnorm=f=150:g=15" -ac 1 -ar 16000 "${optimizedAudioPath}"`);
         console.log(`[✓] 音頻優化完成: ${optimizedAudioPath}`);
         
-        // 創建 Speech 客戶端
-        const speechClient = new SpeechClient({
-            keyFilename: config.google.speechApiKeyFile || process.env.GOOGLE_APPLICATION_CREDENTIALS
-        });
+        // 創建 Speech 客戶端 - 在 Google Cloud 環境中使用默認憑證
+        let speechClient;
+        
+        // 檢查是否在 Google Cloud 環境中
+        const isGoogleCloud = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+        
+        if (isGoogleCloud) {
+            console.log(`[i] 檢測到 Google Cloud 環境，使用默認憑證`);
+            speechClient = new SpeechClient();  // 使用默認憑證
+        } else {
+            // 非 Google Cloud 環境，使用顯式憑證
+            const keyFilePath = config.google.speechApiKeyFile || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+            console.log(`[i] 非 Google Cloud 環境，使用憑證文件: ${keyFilePath}`);
+            
+            try {
+                await fs.access(keyFilePath);
+                console.log(`[✓] Google API 憑證文件存在`);
+            } catch (err) {
+                console.error(`[-] Google API 憑證文件不存在或無法訪問: ${err.message}`);
+                throw new Error(`Google API 憑證文件不存在或無法訪問: ${keyFilePath}`);
+            }
+            
+            speechClient = new SpeechClient({
+                keyFilename: keyFilePath
+            });
+        }
         
         // 準備音頻文件
         const audioBytes = await fs.readFile(optimizedAudioPath);
@@ -258,10 +280,6 @@ async function generateLyrics(vocalPath, outputDir) {
                 boost: 15  // 提高這些詞的權重
             }],
             audioChannelCount: 1,  // 單聲道
-            enableSeparateRecognitionPerChannel: false,
-            diarizationConfig: {
-                enableSpeakerDiarization: false,
-            }
         };
         
         const request = {
@@ -271,74 +289,131 @@ async function generateLyrics(vocalPath, outputDir) {
         
         // 執行語音識別
         console.log(`[+] 開始語音識別...`);
-        const [response] = await speechClient.recognize(request);
-        
-        // 檢查是否有識別結果
-        if (!response.results || response.results.length === 0) {
-            console.warn(`[!] 語音識別沒有返回結果，嘗試使用長音頻識別`);
-            return await generateLyricsLongAudio(optimizedAudioPath, outputDir);
+        try {
+            const [response] = await speechClient.recognize(request);
+            console.log(`[i] 語音識別響應:`, JSON.stringify(response, null, 2));
+            
+            // 檢查是否有識別結果
+            if (!response.results || response.results.length === 0) {
+                console.warn(`[!] 語音識別沒有返回結果，嘗試使用長音頻識別`);
+                return await generateLyricsLongAudio(optimizedAudioPath, outputDir, speechClient);
+            }
+            
+            const transcription = response.results
+                .map(result => result.alternatives[0].transcript)
+                .join('\n');
+            
+            console.log(`[✓] 語音識別結果: ${transcription}`);
+            
+            // 使用 Gemini API 優化歌詞
+            const enhancedLyrics = await enhanceLyricsWithGemini(transcription);
+            console.log(`[✓] Gemini 優化後的歌詞: ${enhancedLyrics}`);
+            
+            // 生成 LRC 格式歌詞
+            let lrcContent = '';
+            
+            // 添加標題信息
+            lrcContent += '[ti:自動生成歌詞]\n';
+            lrcContent += '[ar:AI 生成]\n';
+            lrcContent += `[al:${path.basename(vocalPath, path.extname(vocalPath))}]\n`;
+            lrcContent += '[by:AI 音準資源製作器]\n\n';
+            
+            // 處理每個單詞的時間戳
+            response.results.forEach(result => {
+                const alternative = result.alternatives[0];
+                if (alternative.words && alternative.words.length > 0) {
+                    alternative.words.forEach(wordInfo => {
+                        const startTime = wordInfo.startTime.seconds + wordInfo.startTime.nanos / 1000000000;
+                        const minutes = Math.floor(startTime / 60);
+                        const seconds = startTime % 60;
+                        const timeCode = `[${minutes.toString().padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}]`;
+                        lrcContent += `${timeCode}${wordInfo.word}\n`;
+                    });
+                }
+            });
+            
+            // 保存原始 LRC 文件
+            const lrcPath = path.join(outputDir, 'lyrics.lrc');
+            await fs.writeFile(lrcPath, lrcContent);
+            console.log(`[✓] 歌詞文件已保存: ${lrcPath}`);
+            
+            // 保存 Gemini 優化後的歌詞
+            const enhancedLrcPath = path.join(outputDir, 'lyrics_enhanced.txt');
+            await fs.writeFile(enhancedLrcPath, enhancedLyrics);
+            console.log(`[✓] 優化後的歌詞文件已保存: ${enhancedLrcPath}`);
+            
+            return lrcPath;
+        } catch (apiError) {
+            console.error(`[-] Google Speech API 錯誤:`, apiError);
+            console.error(`[-] 錯誤詳情:`, JSON.stringify(apiError, null, 2));
+            throw apiError;
         }
+    } catch (error) {
+        console.error(`[-] 語音識別錯誤: ${error.message}`);
+        console.error(`[-] 錯誤堆疊:`, error.stack);
         
-        const transcription = response.results
-            .map(result => result.alternatives[0].transcript)
-            .join('\n');
+        // 嘗試使用 Whisper 作為備用
+        try {
+            console.log(`[!] 嘗試使用 Whisper 作為備用...`);
+            return await generateLyricsWithWhisper(vocalPath, outputDir);
+        } catch (whisperError) {
+            console.error(`[-] Whisper 備用也失敗了: ${whisperError.message}`);
+            
+            // 如果 Whisper 也失敗，創建一個空的 LRC 文件
+            const lrcPath = path.join(outputDir, 'lyrics.lrc');
+            await fs.writeFile(lrcPath, '[00:00.00]無法生成歌詞\n[00:05.00]請稍後再試');
+            
+            return lrcPath;
+        }
+    }
+}
+
+// 使用 Whisper 作為備用語音識別
+async function generateLyricsWithWhisper(vocalPath, outputDir) {
+    console.log(`[+] 使用 Whisper 生成歌詞: ${vocalPath}`);
+    
+    try {
+        // 檢查是否安裝了 whisper
+        const whisperPath = config.ai.whisperPath || 'whisper';
         
-        console.log(`[✓] 語音識別結果: ${transcription}`);
+        // 執行 Whisper 命令
+        const command = `${whisperPath} "${vocalPath}" --model tiny --language zh --output_format json --output_dir "${outputDir}"`;
         
-        // 使用 Gemini API 優化歌詞
-        const enhancedLyrics = await enhanceLyricsWithGemini(transcription);
-        console.log(`[✓] Gemini 優化後的歌詞: ${enhancedLyrics}`);
+        console.log(`[+] 執行 Whisper 命令: ${command}`);
+        const { stdout } = await execPromise(command);
+        console.log(`[✓] Whisper 輸出: ${stdout}`);
+        
+        // 讀取 Whisper 生成的 JSON 文件
+        const whisperOutputFile = path.join(outputDir, path.basename(vocalPath, path.extname(vocalPath)) + '.json');
+        const whisperData = JSON.parse(await fs.readFile(whisperOutputFile, 'utf8'));
         
         // 生成 LRC 格式歌詞
         let lrcContent = '';
         
         // 添加標題信息
-        lrcContent += '[ti:自動生成歌詞]\n';
+        lrcContent += '[ti:Whisper自動生成歌詞]\n';
         lrcContent += '[ar:AI 生成]\n';
         lrcContent += `[al:${path.basename(vocalPath, path.extname(vocalPath))}]\n`;
         lrcContent += '[by:AI 音準資源製作器]\n\n';
         
-        // 處理每個單詞的時間戳
-        response.results.forEach(result => {
-            const alternative = result.alternatives[0];
-            if (alternative.words && alternative.words.length > 0) {
-                alternative.words.forEach(wordInfo => {
-                    const startTime = wordInfo.startTime.seconds + wordInfo.startTime.nanos / 1000000000;
-                    const minutes = Math.floor(startTime / 60);
-                    const seconds = startTime % 60;
-                    const timeCode = `[${minutes.toString().padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}]`;
-                    lrcContent += `${timeCode}${wordInfo.word}\n`;
-                });
-            } else {
-                // 如果沒有單詞時間戳，則使用整句的時間戳
-                const startTime = result.resultStartTime ? 
-                    (result.resultStartTime.seconds + result.resultStartTime.nanos / 1000000000) : 0;
-                const minutes = Math.floor(startTime / 60);
-                const seconds = startTime % 60;
-                const timeCode = `[${minutes.toString().padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}]`;
-                lrcContent += `${timeCode}${alternative.transcript}\n`;
-            }
+        // 處理每個段落
+        whisperData.segments.forEach(segment => {
+            const startTime = segment.start;
+            const minutes = Math.floor(startTime / 60);
+            const seconds = startTime % 60;
+            const timeCode = `[${minutes.toString().padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}]`;
+            lrcContent += `${timeCode}${segment.text}\n`;
         });
         
-        // 保存原始 LRC 文件
+        // 保存 LRC 文件
         const lrcPath = path.join(outputDir, 'lyrics.lrc');
         await fs.writeFile(lrcPath, lrcContent);
-        console.log(`[✓] 歌詞文件已保存: ${lrcPath}`);
-        
-        // 保存 Gemini 優化後的歌詞
-        const enhancedLrcPath = path.join(outputDir, 'lyrics_enhanced.txt');
-        await fs.writeFile(enhancedLrcPath, enhancedLyrics);
-        console.log(`[✓] 優化後的歌詞文件已保存: ${enhancedLrcPath}`);
+        console.log(`[✓] Whisper 歌詞文件已保存: ${lrcPath}`);
         
         return lrcPath;
     } catch (error) {
-        console.error(`[-] 語音識別錯誤: ${error.message}`);
-        
-        // 如果 API 失敗，創建一個空的 LRC 文件
-        const lrcPath = path.join(outputDir, 'lyrics.lrc');
-        await fs.writeFile(lrcPath, '[00:00.00]無法生成歌詞\n[00:05.00]請稍後再試');
-        
-        return lrcPath;
+        console.error(`[-] Whisper 處理錯誤: ${error.message}`);
+        throw error;
     }
 }
 
@@ -382,14 +457,23 @@ ${rawLyrics}
 }
 
 // 處理長音頻文件的語音識別
-async function generateLyricsLongAudio(audioPath, outputDir) {
-    console.log(`[+] 使用長音頻識別處理: ${audioPath}`);
+async function generateLyricsLongAudio(audioPath, outputDir, speechClient = null) {
+    console.log(`[+] 使用長音頻識別: ${audioPath}`);
     
     try {
-        // 創建 Speech 客戶端
-        const speechClient = new SpeechClient({
-            keyFilename: config.google.speechApiKeyFile || process.env.GOOGLE_APPLICATION_CREDENTIALS
-        });
+        // 如果沒有提供 speechClient，則創建一個
+        if (!speechClient) {
+            const isGoogleCloud = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+            
+            if (isGoogleCloud) {
+                speechClient = new SpeechClient();  // 使用默認憑證
+            } else {
+                const keyFilePath = config.google.speechApiKeyFile || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+                speechClient = new SpeechClient({
+                    keyFilename: keyFilePath
+                });
+            }
+        }
         
         // 準備 GCS URI 或直接讀取文件
         const audioBytes = await fs.readFile(audioPath);
@@ -419,18 +503,14 @@ async function generateLyricsLongAudio(audioPath, outputDir) {
             config: speechConfig,
         };
         
-        // 創建長時間運行操作
+        // 執行長音頻識別
+        console.log(`[+] 開始長音頻識別...`);
         const [operation] = await speechClient.longRunningRecognize(request);
-        console.log(`[+] 長音頻識別任務已啟動，等待完成...`);
+        console.log(`[i] 長音頻識別操作已啟動`);
         
         // 等待操作完成
         const [response] = await operation.promise();
-        
-        // 檢查結果
-        if (!response.results || response.results.length === 0) {
-            console.warn(`[!] 長音頻識別沒有返回結果`);
-            throw new Error('語音識別沒有返回結果');
-        }
+        console.log(`[✓] 長音頻識別完成`);
         
         // 提取完整文本用於 Gemini 優化
         const transcription = response.results
@@ -477,12 +557,7 @@ async function generateLyricsLongAudio(audioPath, outputDir) {
         return lrcPath;
     } catch (error) {
         console.error(`[-] 長音頻識別錯誤: ${error.message}`);
-        
-        // 如果 API 失敗，創建一個空的 LRC 文件
-        const lrcPath = path.join(outputDir, 'lyrics.lrc');
-        await fs.writeFile(lrcPath, '[00:00.00]無法生成歌詞(長音頻處理失敗)\n[00:05.00]請稍後再試');
-        
-        return lrcPath;
+        throw error;
     }
 }
 
