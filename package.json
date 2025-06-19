@@ -24,6 +24,7 @@
   "description": "AI-powered pitch training application with real-time vocal analysis and scoring system",
   "dependencies": {
     "@google-cloud/speech": "^7.1.0",
+    "@google-cloud/storage": "^7.16.0",
     "@google/generative-ai": "^0.24.1",
     "acrcloud": "^1.4.0",
     "axios": "^1.9.0",
