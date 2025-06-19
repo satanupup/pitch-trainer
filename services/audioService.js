@@ -185,18 +185,36 @@ async function extractMidi(vocalPath, outputDir) {
     
     try {
         const basicPitchEnv = config.ai.basicpitchEnv || 'basicpitch-env';
-        const outputMidiPath = path.join(outputDir, 'melody.mid');
         
-        // 使用 conda 環境運行 Basic Pitch
-        const command = `conda run -n ${basicPitchEnv} basic-pitch "${vocalPath}" --output-midi "${outputMidiPath}"`;
+        // 1. 【修正】使用正確的 basic-pitch 指令
+        //    第一個參數是輸出資料夾，第二個是輸入檔案
+        const command = `conda run -n ${basicPitchEnv} basic-pitch "${outputDir}" "${vocalPath}"`;
         
         const { stdout } = await execPromise(command);
-        console.log(`[✓] Basic Pitch 輸出: ${stdout}`);
+        console.log(`[✓] Basic Pitch 處理完成: ${stdout}`);
         
-        return outputMidiPath;
+        // 2. 【新增】找到 basic-pitch 自動生成的 MIDI 檔案
+        //    它會根據輸入檔案的名稱來命名，例如 vocals.mp3 -> vocals_basic_pitch.mid
+        const inputFileName = path.basename(vocalPath, path.extname(vocalPath));
+        const generatedMidiName = `${inputFileName}_basic_pitch.mid`;
+        const generatedMidiPath = path.join(outputDir, generatedMidiName);
+
+        // 檢查自動生成的檔案是否存在
+        await fs.access(generatedMidiPath);
+        console.log(`[✓] 找到由 Basic Pitch 生成的檔案: ${generatedMidiPath}`);
+
+        // 3. 【新增】將生成的檔案重命名為我們後續流程預期的 'melody.mid'
+        const expectedMidiPath = path.join(outputDir, 'melody.mid');
+        await fs.rename(generatedMidiPath, expectedMidiPath);
+        console.log(`[✓] MIDI 檔案已重命名為: ${expectedMidiPath}`);
+
+        // 返回我們預期的、重命名後的檔案路徑
+        return expectedMidiPath;
+        
     } catch (error) {
         console.error(`[-] Basic Pitch 執行錯誤: ${error.message}`);
-        throw error;
+        // 拋出錯誤，讓主流程知道處理失敗
+        throw new Error(`Basic Pitch 執行失敗: ${error.message}`);
     }
 }
 

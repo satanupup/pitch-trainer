@@ -24,6 +24,9 @@ async function loadSong(songData) {
         // 清除之前的播放器狀態
         if (state.player) {
             state.player.loaded = false;
+            if (state.player.tonePlayer) {
+                state.player.tonePlayer.dispose();
+            }
         }
         
         // 創建新的播放器
@@ -57,27 +60,42 @@ async function loadSong(songData) {
         if (songData.midi) {
             try {
                 const midiResponse = await fetch(songData.midi);
+                if (!midiResponse.ok) {
+                    throw new Error(`HTTP error! status: ${midiResponse.status}`);
+                }
                 const midiArrayBuffer = await midiResponse.arrayBuffer();
+                if (midiArrayBuffer.byteLength === 0) {
+                    throw new Error('MIDI file is empty');
+                }
                 const midi = new Midi(midiArrayBuffer);
                 state.currentMidi = midi;
                 console.log(`[✓] MIDI 加載完成: ${songData.midi}`);
             } catch (midiErr) {
                 console.error(`[-] MIDI 加載失敗: ${midiErr}`);
                 // MIDI 加載失敗不應該阻止整個歌曲的加載
+                state.currentMidi = null;
             }
+        } else {
+            state.currentMidi = null;
         }
         
         // 如果有歌詞文件，也加載它
         if (songData.lrc) {
             try {
                 const lrcResponse = await fetch(songData.lrc);
+                if (!lrcResponse.ok) {
+                    throw new Error(`HTTP error! status: ${lrcResponse.status}`);
+                }
                 const lrcText = await lrcResponse.text();
                 state.currentLyrics = parseLRC(lrcText);
                 console.log(`[✓] 歌詞加載完成: ${songData.lrc}`);
             } catch (lrcErr) {
                 console.error(`[-] 歌詞加載失敗: ${lrcErr}`);
                 // 歌詞加載失敗不應該阻止整個歌曲的加載
+                state.currentLyrics = [];
             }
+        } else {
+            state.currentLyrics = [];
         }
         
         // 設置 Tone.js Transport
