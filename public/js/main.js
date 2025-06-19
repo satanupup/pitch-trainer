@@ -27,6 +27,21 @@ class App {
     const songList = await fetchSongs();
     state.songList = songList;
     updateSongListUI(songList);
+
+    // 添加錯誤日誌區域的切換功能
+    const toggleDebugBtn = document.getElementById('toggle-debug');
+    const debugPanel = document.getElementById('debug-panel');
+    
+    if (toggleDebugBtn && debugPanel) {
+        toggleDebugBtn.addEventListener('click', () => {
+            debugPanel.style.display = debugPanel.style.display === 'block' ? 'none' : 'block';
+        });
+    }
+    
+    // 在移動設備上默認顯示錯誤日誌
+    if (window.innerWidth <= 768 && debugPanel) {
+        debugPanel.style.display = 'block';
+    }
   }
 
   async handleUpload(event) {

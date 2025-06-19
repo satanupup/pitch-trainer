@@ -284,3 +284,50 @@ input[type="file"] { background-color: #fff; color: #333; }
 }
 
 /* 其餘元件樣式請見 toast.css、dashboard.css、upload.css */
+
+/* 錯誤日誌區域樣式 */
+.debug-panel {
+    margin-top: 20px;
+    width: 100%;
+    max-width: 800px;
+    border: 1px solid #444;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: none;
+}
+
+.debug-panel h3 {
+    padding: 10px;
+    margin: 0;
+    background-color: #333;
+    color: #fff;
+}
+
+.error-log-area {
+    height: 150px;
+    overflow-y: auto;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #f8f8f8;
+}
+
+.log-entry {
+    margin-bottom: 5px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 5px;
+}
+
+.toggle-debug-btn {
+    width: 100%;
+    padding: 8px;
+    background-color: #333;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.toggle-debug-btn:hover {
+    background-color: #555;
+}

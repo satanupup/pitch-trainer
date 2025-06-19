@@ -22,6 +22,17 @@ export class ErrorHandler {
                 document.body.removeChild(toast);
             }, 300);
         }, 5000);
+        
+        // 同時添加到錯誤日誌區域
+        const logArea = document.getElementById('error-log-area');
+        if (logArea) {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            logArea.appendChild(logEntry);
+            // 保持滾動到最新的日誌
+            logArea.scrollTop = logArea.scrollHeight;
+        }
     }
     
     static async retry(fn, maxRetries = 3, delay = 1000) {

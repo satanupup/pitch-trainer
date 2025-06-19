@@ -23,12 +23,7 @@ async function initializeAudioAndLoadSong(songData) {
 async function loadSong(songData) {
     try {
         // 清除之前的播放器狀態
-        if (state.player) {
-            state.player.loaded = false;
-            if (state.player.tonePlayer) {
-                state.player.tonePlayer.dispose();
-            }
-        }
+        clearPreviousPlayer();
         
         // 創建新的播放器
         state.player = {
@@ -37,79 +32,24 @@ async function loadSong(songData) {
         };
         
         // 加載 MP3 文件
-        console.log(`[+] 正在加載歌曲: ${songData.name}`);
-        const mp3Url = songData.mp3;
+        await loadAudioFile(songData);
         
-        // 使用 Tone.js 的 Player 加載音頻
-        const player = new Tone.Player({
-            url: mp3Url,
-            autostart: false,
-            onload: () => {
-                console.log(`[✓] 歌曲加載完成: ${songData.name}`);
-                state.player.loaded = true;
-            },
-            onerror: (err) => {
-                console.error(`[-] 歌曲加載失敗: ${err}`);
-                ErrorHandler.showError(`無法加載歌曲: ${err}`);
-            }
-        }).connect(state.pitchShift);
-        
-        // 將播放器保存到狀態中
-        state.player.tonePlayer = player;
-        
-        // 如果有 MIDI 文件，也加載它
+        // 加載 MIDI 文件
         if (songData.midi) {
-            try {
-                const midiResponse = await fetch(songData.midi);
-                if (!midiResponse.ok) {
-                    throw new Error(`HTTP error! status: ${midiResponse.status}`);
-                }
-                const midiArrayBuffer = await midiResponse.arrayBuffer();
-                if (midiArrayBuffer.byteLength === 0) {
-                    throw new Error('MIDI file is empty');
-                }
-                const midi = new Midi(midiArrayBuffer);
-                state.currentMidi = midi;
-                console.log(`[✓] MIDI 加載完成: ${songData.midi}`);
-            } catch (midiErr) {
-                console.error(`[-] MIDI 加載失敗: ${midiErr}`);
-                // MIDI 加載失敗不應該阻止整個歌曲的加載
-                state.currentMidi = null;
-            }
+            await loadMidiFile(songData.midi);
         } else {
             state.currentMidi = null;
         }
         
-        // 如果有歌詞文件，也加載它
+        // 加載歌詞文件
         if (songData.lrc) {
-            try {
-                const lrcResponse = await fetch(songData.lrc);
-                if (!lrcResponse.ok) {
-                    throw new Error(`HTTP error! status: ${lrcResponse.status}`);
-                }
-                const lrcText = await lrcResponse.text();
-                state.currentLyrics = parseLRC(lrcText);
-                console.log(`[✓] 歌詞加載完成: ${songData.lrc}`);
-            } catch (lrcErr) {
-                console.error(`[-] 歌詞加載失敗: ${lrcErr}`);
-                // 歌詞加載失敗不應該阻止整個歌曲的加載
-                state.currentLyrics = [];
-            }
+            await loadLyricsFile(songData.lrc);
         } else {
             state.currentLyrics = [];
         }
         
         // 設置 Tone.js Transport
-        Tone.Transport.cancel(); // 清除之前的所有事件
-        Tone.Transport.stop();   // 確保 Transport 是停止的
-        
-        // 設置 Transport 的回調，用於更新 UI
-        Tone.Transport.scheduleRepeat((time) => {
-            // 這裡可以添加需要定期執行的代碼，比如更新進度條
-            if (state.currentLyrics && state.currentLyrics.length > 0) {
-                updateLyrics(Tone.Transport.seconds);
-            }
-        }, 0.1);
+        setupTransport();
         
         return true;
     } catch (err) {
@@ -119,6 +59,91 @@ async function loadSong(songData) {
     }
 }
 
+// 清除之前的播放器狀態
+function clearPreviousPlayer() {
+    if (state.player) {
+        state.player.loaded = false;
+        if (state.player.tonePlayer) {
+            state.player.tonePlayer.dispose();
+        }
+    }
+}
+
+// 加載音頻文件
+async function loadAudioFile(songData) {
+    console.log(`[+] 正在加載歌曲: ${songData.name}`);
+    const mp3Url = songData.mp3;
+    
+    // 使用 Tone.js 的 Player 加載音頻
+    const player = new Tone.Player({
+        url: mp3Url,
+        autostart: false,
+        onload: () => {
+            console.log(`[✓] 歌曲加載完成: ${songData.name}`);
+            state.player.loaded = true;
+        },
+        onerror: (err) => {
+            console.error(`[-] 歌曲加載失敗: ${err}`);
+            ErrorHandler.showError(`無法加載歌曲: ${err}`);
+        }
+    }).connect(state.pitchShift);
+    
+    // 將播放器保存到狀態中
+    state.player.tonePlayer = player;
+}
+
+// 加載 MIDI 文件
+async function loadMidiFile(midiUrl) {
+    try {
+        const midiResponse = await fetch(midiUrl);
+        if (!midiResponse.ok) {
+            throw new Error(`HTTP error! status: ${midiResponse.status}`);
+        }
+        const midiArrayBuffer = await midiResponse.arrayBuffer();
+        if (midiArrayBuffer.byteLength === 0) {
+            throw new Error('MIDI file is empty');
+        }
+        const midi = new Midi(midiArrayBuffer);
+        state.currentMidi = midi;
+        console.log(`[✓] MIDI 加載完成: ${midiUrl}`);
+    } catch (midiErr) {
+        console.error(`[-] MIDI 加載失敗: ${midiErr}`);
+        // MIDI 加載失敗不應該阻止整個歌曲的加載
+        state.currentMidi = null;
+    }
+}
+
+// 加載歌詞文件
+async function loadLyricsFile(lrcUrl) {
+    try {
+        const lrcResponse = await fetch(lrcUrl);
+        if (!lrcResponse.ok) {
+            throw new Error(`HTTP error! status: ${lrcResponse.status}`);
+        }
+        const lrcText = await lrcResponse.text();
+        state.currentLyrics = parseLRC(lrcText);
+        console.log(`[✓] 歌詞加載完成: ${lrcUrl}`);
+    } catch (lrcErr) {
+        console.error(`[-] 歌詞加載失敗: ${lrcErr}`);
+        // 歌詞加載失敗不應該阻止整個歌曲的加載
+        state.currentLyrics = [];
+    }
+}
+
+// 設置 Tone.js Transport
+function setupTransport() {
+    Tone.Transport.cancel(); // 清除之前的所有事件
+    Tone.Transport.stop();   // 確保 Transport 是停止的
+    
+    // 設置 Transport 的回調，用於更新 UI
+    Tone.Transport.scheduleRepeat((time) => {
+        // 這裡可以添加需要定期執行的代碼，比如更新進度條
+        if (state.currentLyrics && state.currentLyrics.length > 0) {
+            updateLyrics(Tone.Transport.seconds);
+        }
+    }, 0.1);
+}
+
 async function startPitchDetection() {
     if (!state.isAudioInitialized) {
         ErrorHandler.showError('請先選擇一首歌曲來啟用音訊功能。');
@@ -126,14 +151,39 @@ async function startPitchDetection() {
     }
     if (state.microphoneStream) return;
     try {
-        state.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('[+] 正在請求麥克風權限...');
+        ErrorHandler.showError('正在請求麥克風權限...');
+        
+        state.microphoneStream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            } 
+        });
+        console.log('[✓] 麥克風權限已獲取');
+        ErrorHandler.showError('麥克風權限已獲取');
+        
         const source = state.audioContext.createMediaStreamSource(state.microphoneStream);
         state.analyser = state.audioContext.createAnalyser();
         state.analyser.fftSize = 2048;
         source.connect(state.analyser);
+        console.log('[✓] 麥克風已連接到分析器');
+        ErrorHandler.showError('麥克風已連接到分析器');
+        
+        // 測試麥克風是否接收到聲音
+        const dataArray = new Float32Array(state.analyser.frequencyBinCount);
+        state.analyser.getFloatTimeDomainData(dataArray);
+        const rms = Math.sqrt(dataArray.reduce((acc, val) => acc + val * val, 0) / dataArray.length);
+        console.log(`[i] 麥克風音量檢測: ${rms}`);
+        ErrorHandler.showError(`麥克風音量檢測: ${rms}`);
+        
+        if (rms < 0.01) {
+            ErrorHandler.showError('警告: 麥克風音量過低，請確認麥克風是否正常工作');
+        }
     } catch (err) {
         console.error('麥克風權限獲取失敗:', err);
-        ErrorHandler.showError('無法取得麥克風權限，請確認瀏覽器設定。');
+        ErrorHandler.showError('無法取得麥克風權限，請確認瀏覽器設定。錯誤: ' + err.message);
         throw new Error('麥克風權限獲取失敗: ' + err.message);
     }
 }
