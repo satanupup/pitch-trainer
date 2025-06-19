@@ -1,10 +1,9 @@
+// 不要引入 init.js，避免循環依賴
 const config = require('./config');
 const dbPool = require('./dbPool');
-const { validateConfig } = require('./init');
 
-// 導出所有需要的配置和功能
+// 導出配置和資料庫連接池
 module.exports = {
     ...config,
-    dbPool,
-    validateConfig
+    dbPool
 };

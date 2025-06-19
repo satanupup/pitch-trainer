@@ -13,10 +13,11 @@ const { SpeechClient } = require('@google-cloud/speech');
 const { performanceMonitor } = require('./middleware/performanceMonitor');
 const { errorHandler } = require('./middleware/errorHandler');
 // 從新的配置結構導入
-const { server, db, ai, limits, cache, dbPool, validateConfig } = require('./config');
+const configModule = require('./config');
+const { validateConfig } = require('./config/init');
 
 const app = express();
-const PORT = server.port;
+const PORT = configModule.server.port;
 
 let speechClient = new SpeechClient();
 
@@ -35,7 +36,7 @@ const validateFile = (req, res, next) => {
         return res.status(400).json({ error: '不支援的檔案格式，請上傳 MP3、WAV 或 M4A 檔案' });
     }
     
-    const maxSize = limits.maxFileSize;
+    const maxSize = configModule.limits.maxFileSize;
     if (req.file.size > maxSize) {
         return res.status(400).json({ error: `檔案過大，請上傳小於 ${maxSize / 1024 / 1024}MB 的檔案` });
     }
@@ -45,8 +46,8 @@ const validateFile = (req, res, next) => {
 
 // 簡單的速率限制
 const rateLimit = new Map();
-const RATE_LIMIT_WINDOW = limits.rateLimitWindow;
-const RATE_LIMIT_MAX = limits.rateLimitMax;
+const RATE_LIMIT_WINDOW = configModule.limits.rateLimitWindow;
+const RATE_LIMIT_MAX = configModule.limits.rateLimitMax;
 
 const uploadLimiter = (req, res, next) => {
     const clientIP = req.ip || req.connection.remoteAddress;
@@ -75,7 +76,7 @@ const uploadLimiter = (req, res, next) => {
 const upload = multer({ 
     dest: 'uploads/',
     limits: {
-        fileSize: limits.maxFileSize,
+        fileSize: configModule.limits.maxFileSize,
         files: 1
     }
 });
@@ -148,12 +149,12 @@ async function processSong(jobId, originalFilePath, originalFileName) {
 
     try {
         console.log(`[+] 檢查是否存在同名歌曲: ${userVisibleSongName}`);
-        const [existingSongs] = await dbPool.query('SELECT id FROM songs WHERE name = ?', [userVisibleSongName]);
+        const [existingSongs] = await configModule.dbPool.query('SELECT id FROM songs WHERE name = ?', [userVisibleSongName]);
         if (existingSongs.length > 0) {
             console.warn(`[!] 發現同名歌曲，將進行覆蓋處理。`);
             const existingSongId = existingSongs[0].id;
-            await dbPool.query('DELETE FROM jobs WHERE song_id = ?', [existingSongId]);
-            await dbPool.query('DELETE FROM songs WHERE id = ?', [existingSongId]);
+            await configModule.dbPool.query('DELETE FROM jobs WHERE song_id = ?', [existingSongId]);
+            await configModule.dbPool.query('DELETE FROM songs WHERE id = ?', [existingSongId]);
             if (fs.existsSync(finalDir)) {
                 await fsp.rm(finalDir, { recursive: true, force: true });
                 console.log(`[✓] 已刪除舊的歌曲資料夾: ${finalDir}`);
@@ -163,9 +164,9 @@ async function processSong(jobId, originalFilePath, originalFileName) {
         await fsp.mkdir(outputDir, { recursive: true });
 
         // 步驟 1: 人聲分離
-        await dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ? WHERE id = ?', ['processing', 25, '正在分離人聲與伴奏(標準模型)...', jobId]);
+        await configModule.dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ? WHERE id = ?', ['processing', 25, '正在分離人聲與伴奏(標準模型)...', jobId]);
         // 【修改】使用標準的 2stems 模型，輸出 44.1kHz 音訊
-        await runCommand(`${config.ai.spleeterPath} separate -p spleeter:2stems -o "${outputDir}" "${originalFilePath}"`);
+        await runCommand(`${configModule.ai.spleeterPath} separate -p spleeter:2stems -o "${outputDir}" "${originalFilePath}"`);
         const vocalsPath = path.join(outputDir, tempFileBaseName, 'vocals.wav');
         const accompanimentPath = path.join(outputDir, tempFileBaseName, 'accompaniment.wav');
         if (!await checkFile(vocalsPath, "人聲分離(人聲)")) throw new Error("人聲分離後，人聲檔案(vocals.wav)不存在或為空。");
@@ -173,38 +174,38 @@ async function processSong(jobId, originalFilePath, originalFileName) {
         console.log(`[✓] 步驟 1/5: 人聲分離完成。`);
 
         // 步驟 2: 旋律提取
-        await dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ? WHERE id = ?', ['processing', 50, '正在從人聲擷取旋律 (MIDI)...', jobId]);
+        await configModule.dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ? WHERE id = ?', ['processing', 50, '正在從人聲擷取旋律 (MIDI)...', jobId]);
         const midiOutputDir = path.join(outputDir, 'midi');
         await fsp.mkdir(midiOutputDir, { recursive: true });
-        await runCommand(`conda run -n ${config.ai.basicpitchEnv} basic-pitch "${midiOutputDir}" "${vocalsPath}"`);
+        await runCommand(`conda run -n ${configModule.ai.basicpitchEnv} basic-pitch "${midiOutputDir}" "${vocalsPath}"`);
         const midiPath = path.join(midiOutputDir, `vocals_basic_pitch.mid`);
         if (!await checkFile(midiPath, "旋律提取")) throw new Error("旋律提取後，MIDI 檔案不存在或為空。");
         console.log(`[✓] 步驟 2/5: 旋律提取完成。`);
 
         // 步驟 3: 歌詞產生
-        await dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ? WHERE id = ?', ['processing', 75, '正在從人聲產生歌詞 (LRC)...', jobId]);
+        await configModule.dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ? WHERE id = ?', ['processing', 75, '正在從人聲產生歌詞 (LRC)...', jobId]);
         const lrcContent = await getLrcFromGoogleStreaming(vocalsPath);
         console.log(`[✓] 步驟 3/5: 歌詞產生完成。 (共 ${lrcContent.split('\n').filter(Boolean).length} 行)`);
 
         // 步驟 4: 整理檔案
-        await dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ? WHERE id = ?', ['processing', 95, '正在整理與轉檔...', jobId]);
+        await configModule.dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ? WHERE id = ?', ['processing', 95, '正在整理與轉檔...', jobId]);
         await fsp.mkdir(finalDir, { recursive: true });
         const finalMp3Path = path.join(finalDir, 'audio.mp3');
         const finalMidiPath = path.join(finalDir, 'melody.mid');
         const finalLrcPath = path.join(finalDir, 'lyrics.lrc');
-        await runCommand(`${config.ai.ffmpegPath} -i "${accompanimentPath}" -ab 192k -y "${finalMp3Path}"`);
+        await runCommand(`${configModule.ai.ffmpegPath} -i "${accompanimentPath}" -ab 192k -y "${finalMp3Path}"`);
         await fsp.rename(midiPath, finalMidiPath);
         await fsp.writeFile(finalLrcPath, lrcContent || '[00:00.00]AI 未能產生歌詞');
         console.log(`[✓] 步驟 4/5: 檔案整理完成。`);
 
         // 步驟 5: 更新資料庫
-        const [songResult] = await dbPool.query('INSERT INTO songs (name, mp3_path, midi_path, lrc_path) VALUES (?, ?, ?, ?)', [userVisibleSongName, `songs/${userVisibleSongName}/audio.mp3`, `songs/${userVisibleSongName}/melody.mid`, `songs/${userVisibleSongName}/lyrics.lrc`]);
-        await dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ?, song_id = ? WHERE id = ?', ['completed', 100, '處理完成！', songResult.insertId, jobId]);
+        const [songResult] = await configModule.dbPool.query('INSERT INTO songs (name, mp3_path, midi_path, lrc_path) VALUES (?, ?, ?, ?)', [userVisibleSongName, `songs/${userVisibleSongName}/audio.mp3`, `songs/${userVisibleSongName}/melody.mid`, `songs/${userVisibleSongName}/lyrics.lrc`]);
+        await configModule.dbPool.query('UPDATE jobs SET status = ?, progress = ?, message = ?, song_id = ? WHERE id = ?', ['completed', 100, '處理完成！', songResult.insertId, jobId]);
         console.log(`[✓] 步驟 5/5: 資料庫更新完成。`);
         console.log(`[===== 任務 ${jobId} 已成功完成 =====]`);
     } catch (error) {
         console.error(`[-] 任務 ${jobId} 失敗:`, error);
-        await dbPool.query('UPDATE jobs SET status = ?, message = ? WHERE id = ?', ['failed', error.message, jobId]);
+        await configModule.dbPool.query('UPDATE jobs SET status = ?, message = ? WHERE id = ?', ['failed', error.message, jobId]);
     } finally {
         console.log(`[+] 正在清理任務 ${jobId} 的暫存檔案...`);
         // 【修改】暫時註解掉清理指令，以供偵錯
@@ -235,7 +236,7 @@ async function startServer() {
         console.log('[+] 正在建立 MySQL 資料庫連線池...');
         // 不需要再創建 dbPool，因為已經從配置導入
         
-        const connection = await dbPool.getConnection();
+        const connection = await configModule.dbPool.getConnection();
         await connection.ping();
         connection.release();
         console.log('[✓] MySQL 資料庫連接成功！');
@@ -244,9 +245,9 @@ async function startServer() {
         app.listen(PORT, () => {
             console.log(`✅ Server running on port ${PORT}`);
             console.log(`[✓] AI 資源製作器後端已啟動於 http://localhost:${PORT}`);
-            console.log(`[✓] 環境: ${server.env}`);
-            console.log(`[✓] 檔案大小限制: ${limits.maxFileSize / 1024 / 1024}MB`);
-            console.log(`[✓] 速率限制: ${limits.rateLimitMax} 次/${limits.rateLimitWindow / 1000 / 60} 分鐘`);
+            console.log(`[✓] 環境: ${configModule.server.env}`);
+            console.log(`[✓] 檔案大小限制: ${configModule.limits.maxFileSize / 1024 / 1024}MB`);
+            console.log(`[✓] 速率限制: ${configModule.limits.rateLimitMax} 次/${configModule.limits.rateLimitWindow / 1000 / 60} 分鐘`);
         });
     } catch (error) {
         console.error('[-] 伺服器啟動失敗:', error);

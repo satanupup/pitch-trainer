@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+// 直接引入 config.js 而不是 index.js
 const config = require('./config');
 
 function validateConfig() {
