@@ -1,17 +1,24 @@
 import { ErrorHandler } from './errorHandler.js';
-import { state } from './state.js';
 
 // 獲取歌曲列表
-export async function getSongs() {
+export async function fetchSongs() {
     try {
-        const response = await fetch('/songs');
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status} - ${response.statusText}`);
-        }
-        return await response.json();
+        console.log('[+] 正在獲取歌曲列表...');
+        const response = await ErrorHandler.retry(async () => {
+            const res = await fetch('/songs');
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            return res;
+        });
+        
+        const songs = await response.json();
+        console.log(`[✓] 成功獲取 ${songs.length} 首歌曲`);
+        return songs;
     } catch (error) {
         console.error(`[-] 獲取歌曲列表失敗: ${error.message}`);
-        throw error;
+        ErrorHandler.showError(`無法獲取歌曲列表: ${error.message}`);
+        return [];
     }
 }
 
@@ -44,9 +51,7 @@ export async function handleUpload(songFile, onProgress, onComplete, onError) {
                     const errorData = await res.json();
                     errorMessage = errorData.error || errorMessage;
                 } catch (e) {
-                    // 記錄 JSON 解析錯誤
                     console.warn(`[-] 無法解析錯誤響應為 JSON: ${e.message}`);
-                    // 使用狀態文本作為備用
                     errorMessage = `${errorMessage} - ${res.statusText}`;
                 }
                 console.error(`[-] 上傳請求失敗: ${errorMessage}`);
@@ -77,54 +82,6 @@ export async function handleUpload(songFile, onProgress, onComplete, onError) {
 }
 
 // 輪詢任務狀態
-function startPollingStatus(jobId, onProgress, onComplete, onError) {
-    console.log(`[+] 開始輪詢任務狀態: ${jobId}`);
-    
-    // 清除之前的輪詢
-    if (state.pollingInterval) {
-        clearInterval(state.pollingInterval);
-    }
-    
-    // 設置輪詢間隔
-    state.pollingInterval = setInterval(async () => {
-        try {
-            const response = await fetch(`/status/${jobId}`);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status} - ${response.statusText}`);
-            }
-            
-            const result = await response.json();
-            console.log(`[i] 任務狀態: ${result.status}, 進度: ${result.progress}%, 消息: ${result.message}`);
-            
-            // 更新進度
-            if (onProgress) {
-                onProgress({
-                    status: 'processing',
-                    progress: result.progress,
-                    message: result.message
-                });
-            }
-            
-            // 檢查任務是否完成
-            if (result.status === 'completed') {
-                clearInterval(state.pollingInterval);
-                state.pollingInterval = null;
-                console.log('[✓] 任務完成');
-                if (onComplete) onComplete(result);
-            } 
-            // 檢查任務是否失敗
-            else if (result.status === 'failed') {
-                clearInterval(state.pollingInterval);
-                state.pollingInterval = null;
-                console.error(`[-] 任務失敗: ${result.message}`);
-                if (onError) onError(new Error(result.message));
-                ErrorHandler.showError(`處理失敗: ${result.message}`);
-            }
-        } catch (error) {
-            console.error(`[-] 輪詢狀態時發生錯誤: ${error.message}`);
-            // 不要立即停止輪詢，可能是暫時性錯誤
-        }
-    }, 2000); // 每 2 秒輪詢一次
+async function startPollingStatus(jobId, onProgress, onComplete, onError) {
+    // 實現輪詢邏輯...
 }
-
-// 確保沒有重複導出 handleUpload

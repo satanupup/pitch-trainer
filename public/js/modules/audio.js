@@ -4,7 +4,9 @@ import { ErrorHandler } from './errorHandler.js';
 async function initializeAudioAndLoadSong(songData) {
     if (!state.isAudioInitialized) {
         try {
+            // 確保這個函數是在用戶交互（如點擊按鈕）後調用的
             await Tone.start();
+            console.log('[✓] Tone.js 音頻上下文已啟動');
             state.audioContext = Tone.getContext().rawContext;
             state.pitchShift = new Tone.PitchShift().toDestination();
             state.isAudioInitialized = true;

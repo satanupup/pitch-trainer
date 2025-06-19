@@ -108,6 +108,7 @@ class App {
       const songData = state.songList.find(song => song.mp3 === selectedPath);
       if (songData) {
         elements.playerArea.classList.remove('hidden');
+        // 這裡是用戶交互後的調用，應該沒問題
         await initializeAudioAndLoadSong(songData);
         this.pitchScoring.reset();
         updateScoringDisplay({
