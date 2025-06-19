@@ -10,6 +10,9 @@ const fsp = fs.promises;
 const { exec } = require('child_process');
 const mysql = require('mysql2/promise');
 const { SpeechClient } = require('@google-cloud/speech');
+const { performanceMonitor } = require('./middleware/performanceMonitor');
+const { errorHandler } = require('./middleware/errorHandler');
+const { validateConfig } = require('./config/init');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -46,6 +49,7 @@ const cache = new Map();
 const CACHE_TTL = config.cache.ttl;
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(performanceMonitor);
 
 // 效能監控中間件
 const performanceMonitor = (req, res, next) => {
@@ -62,8 +66,6 @@ const performanceMonitor = (req, res, next) => {
     
     next();
 };
-
-app.use(performanceMonitor);
 
 // 檔案驗證中間件
 const validateFile = (req, res, next) => {
@@ -256,136 +258,13 @@ async function processSong(jobId, originalFilePath, originalFileName) {
 }
 
 // --- API 端點 ---
-app.get('/', (req, res) => { res.send('AI 資源製作器後端服務正在運作中！'); });
+app.use('/', require('./routes/root'));
+app.use('/songs', require('./routes/songs'));
+app.use('/upload', require('./routes/upload'));
+app.use('/status', require('./routes/status'));
+app.use('/health', require('./routes/health'));
 
-// 健康檢查端點
-app.get('/health', async (req, res) => {
-    try {
-        // 檢查資料庫連接
-        const connection = await dbPool.getConnection();
-        await connection.ping();
-        connection.release();
-        
-        // 檢查目錄權限
-        const uploadsDir = path.join(__dirname, 'uploads');
-        const tempDir = path.join(__dirname, 'temp_processing');
-        const songsDir = path.join(__dirname, 'public/songs');
-        
-        const dirsExist = [uploadsDir, tempDir, songsDir].every(dir => fs.existsSync(dir));
-        
-        res.json({
-            status: 'healthy',
-            timestamp: new Date().toISOString(),
-            version: '5.1.0',
-            database: 'connected',
-            directories: dirsExist ? 'accessible' : 'error',
-            uptime: process.uptime(),
-            memory: process.memoryUsage()
-        });
-    } catch (error) {
-        res.status(503).json({
-            status: 'unhealthy',
-            timestamp: new Date().toISOString(),
-            error: error.message
-        });
-    }
-});
-
-app.get('/songs', async (req, res) => {
-    try {
-        const [rows] = await dbPool.query('SELECT name, mp3_path, midi_path, lrc_path FROM songs ORDER BY created_at DESC');
-        res.json(rows.map(row => ({ name: row.name, mp3: row.mp3_path, midi: row.midi_path, lrc: row.lrc_path })));
-    } catch (error) { console.error("[-] API /songs 錯誤:", error); res.status(500).json({ error: '無法取得歌曲清單' }); }
-});
-
-app.post('/upload', uploadLimiter, upload.single('songfile'), validateFile, async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: '沒有上傳檔案' });
-    const jobId = `job_${Date.now()}`;
-    try {
-        await dbPool.query('INSERT INTO jobs (id, status, message, progress) VALUES (?, ?, ?, ?)', [jobId, 'pending', '任務已建立', 0]);
-        processSong(jobId, req.file.path, req.file.originalname);
-        res.status(202).json({ jobId });
-    } catch (dbError) { console.error("[-] API /upload 錯誤:", dbError); res.status(500).json({ error: "無法建立處理任務" }); }
-});
-
-app.get('/status/:jobId', async (req, res) => {
-    const { jobId } = req.params;
-    try {
-        const [rows] = await dbPool.query('SELECT * FROM jobs WHERE id = ?', [jobId]);
-        if (rows.length === 0) return res.status(404).json({ error: '找不到該任務' });
-        let jobData = rows[0];
-        if (jobData.status === 'completed' && jobData.song_id) {
-            const [songRows] = await dbPool.query('SELECT name, mp3_path, midi_path, lrc_path FROM songs WHERE id = ?', [jobData.song_id]);
-            if(songRows.length > 0) {
-                jobData.song = { name: songRows[0].name, mp3: songRows[0].mp3_path, midi: songRows[0].midi_path, lrc: songRows[0].lrc_path };
-            }
-        }
-        res.json(jobData);
-    } catch(dbError) { console.error(`[-] API /status/${jobId} 錯誤:`, dbError); res.status(500).json({ error: "無法查詢任務狀態" }); }
-});
-
-// 配置驗證函數
-function validateConfig() {
-    const errors = [];
-    
-    // 檢查必要的環境變數
-    if (!process.env.DB_PASSWORD) {
-        console.warn('[⚠️] 警告: 未設定 DB_PASSWORD，使用預設值');
-    }
-    
-    // 檢查 AI 工具路徑
-    if (!fs.existsSync(config.ai.spleeterPath)) {
-        errors.push(`Spleeter 路徑不存在: ${config.ai.spleeterPath}`);
-    }
-    
-    if (!fs.existsSync(config.ai.ffmpegPath)) {
-        errors.push(`FFmpeg 路徑不存在: ${config.ai.ffmpegPath}`);
-    }
-    
-    // 檢查目錄權限
-    const uploadsDir = path.join(__dirname, 'uploads');
-    const tempDir = path.join(__dirname, 'temp_processing');
-    const songsDir = path.join(__dirname, 'public/songs');
-    
-    [uploadsDir, tempDir, songsDir].forEach(dir => {
-        if (!fs.existsSync(dir)) {
-            try {
-                fs.mkdirSync(dir, { recursive: true });
-                console.log(`[✓] 創建目錄: ${dir}`);
-            } catch (err) {
-                errors.push(`無法創建目錄 ${dir}: ${err.message}`);
-            }
-        }
-    });
-    
-    if (errors.length > 0) {
-        console.error('[-] 配置驗證失敗:');
-        errors.forEach(error => console.error(`  - ${error}`));
-        return false;
-    }
-    
-    console.log('[✓] 配置驗證通過');
-    return true;
-}
-
-// 統一錯誤處理中間件
-app.use((error, req, res, next) => {
-    console.error('[-] 伺服器錯誤:', error);
-    
-    if (error.code === 'ENOENT') {
-        return res.status(404).json({ error: '檔案不存在' });
-    }
-    
-    if (error.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: '檔案過大' });
-    }
-    
-    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
-        return res.status(400).json({ error: '檔案數量超出限制' });
-    }
-    
-    res.status(500).json({ error: '伺服器內部錯誤' });
-});
+app.use(errorHandler);
 
 async function startServer() {
     try {

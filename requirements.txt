@@ -1,0 +1,4 @@
+flask==2.3.3
+praat-parselmouth==0.4.3
+numpy==1.24.3
+gunicorn==21.2.0
