@@ -10,6 +10,7 @@ const fsp = fs.promises;
 const { exec } = require('child_process');
 const mysql = require('mysql2/promise');
 const { SpeechClient } = require('@google-cloud/speech');
+// 使用從中間件導入的 performanceMonitor
 const { performanceMonitor } = require('./middleware/performanceMonitor');
 const { errorHandler } = require('./middleware/errorHandler');
 const { validateConfig } = require('./config/init');
@@ -49,20 +50,21 @@ const cache = new Map();
 const CACHE_TTL = config.cache.ttl;
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(customPerformanceMonitor);
+// 使用從中間件導入的 performanceMonitor
+app.use(performanceMonitor);
 
-// 使用自定義的監控中間件
-const customPerformanceMonitor = (req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        console.log(`[📊] ${req.method} ${req.path} - ${duration}ms`);
-        if (duration > 5000) {
-            console.warn(`[⚠️] 慢查詢警告: ${req.path} 耗時 ${duration}ms`);
-        }
-    });
-    next();
-};
+// 移除這段代碼，因為我們已經從 middleware 導入了 performanceMonitor
+// const customPerformanceMonitor = (req, res, next) => {
+//     const start = Date.now();
+//     res.on('finish', () => {
+//         const duration = Date.now() - start;
+//         console.log(`[📊] ${req.method} ${req.path} - ${duration}ms`);
+//         if (duration > 5000) {
+//             console.warn(`[⚠️] 慢查詢警告: ${req.path} 耗時 ${duration}ms`);
+//         }
+//     });
+//     next();
+// };
 
 // 檔案驗證中間件
 const validateFile = (req, res, next) => {
