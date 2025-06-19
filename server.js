@@ -52,20 +52,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(performanceMonitor);
 
 // 效能監控中間件
-const performanceMonitor = (req, res, next) => {
-    const start = Date.now();
-    
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        console.log(`[📊] ${req.method} ${req.path} - ${duration}ms`);
-        
-        if (duration > 5000) {
-            console.warn(`[⚠️] 慢查詢警告: ${req.path} 耗時 ${duration}ms`);
-        }
-    });
-    
-    next();
-};
+const { performanceMonitor } = require('./middleware/performanceMonitor');
 
 // 檔案驗證中間件
 const validateFile = (req, res, next) => {
