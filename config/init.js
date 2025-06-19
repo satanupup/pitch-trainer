@@ -1,17 +1,23 @@
 const fs = require('fs');
 const path = require('path');
-const config = require('.');
+
+// 不再引入 config/index.js，而是直接從環境變數讀取
+const aiConfig = {
+    spleeterPath: process.env.SPLEETER_PATH || '/home/evalhero/spleeter-py10/bin/spleeter',
+    basicpitchEnv: process.env.BASICPITCH_ENV || 'basicpitch-env',
+    ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg'
+};
 
 function validateConfig() {
     const errors = [];
     if (!process.env.DB_PASSWORD) {
         console.warn('[⚠️] 警告: 未設定 DB_PASSWORD，使用預設值');
     }
-    if (!fs.existsSync(config.ai.spleeterPath)) {
-        errors.push(`Spleeter 路徑不存在: ${config.ai.spleeterPath}`);
+    if (!fs.existsSync(aiConfig.spleeterPath)) {
+        errors.push(`Spleeter 路徑不存在: ${aiConfig.spleeterPath}`);
     }
-    if (!fs.existsSync(config.ai.ffmpegPath)) {
-        errors.push(`FFmpeg 路徑不存在: ${config.ai.ffmpegPath}`);
+    if (!fs.existsSync(aiConfig.ffmpegPath)) {
+        errors.push(`FFmpeg 路徑不存在: ${aiConfig.ffmpegPath}`);
     }
     const uploadsDir = path.join(__dirname, '../uploads');
     const tempDir = path.join(__dirname, '../temp_processing');

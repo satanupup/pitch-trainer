@@ -4,7 +4,7 @@ const { validateConfig } = require('./init');
 const ai = {
     spleeterPath: process.env.SPLEETER_PATH || '/home/evalhero/spleeter-py10/bin/spleeter',
     basicpitchEnv: process.env.BASICPITCH_ENV || 'basicpitch-env',
-    ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg'
+    ffmpegPath: process.env.FFMPEG_PATH || '/usr/bin/ffmpeg'
 };
 
 const limits = {
