@@ -193,6 +193,10 @@ let keyOffset = 0, midiData = null, lrcData = [], player = null, pitchShift = nu
 let isAudioInitialized = false, pollingInterval = null;
 let userMinNote = null, userMaxNote = null;
 let songMinNote = null, songMaxNote = null;
+let mediaRecorder, recordedChunks = [], userAudioUrl = null, userAudioPlayer = null, abCompareBtn = null, abMode = 'user';
+let rmsHistory = [];
+let recordingStream = null; // 新增：追蹤錄音 stream
+let recordingIndicator = null; // 錄音提示
 
 // 初始化評分系統和載入管理器
 const pitchScoring = new PitchScoring();
@@ -510,6 +514,7 @@ function updateVisualizer() {
     drawPlayhead();
     drawMidiNotes();
     drawMicrophonePitch();
+    drawLoudnessCurve();
     updateLyrics();
 }
 
@@ -689,4 +694,150 @@ function updateRangeMatch() {
         matchEl.textContent = '音域不足，建議選擇其他歌曲或調整 key';
         matchEl.className = 'range-match bad';
     }
+}
+
+async function startRecording() {
+    // 若有前次錄音 stream，先釋放
+    if (recordingStream) {
+        recordingStream.getTracks().forEach(track => track.stop());
+        recordingStream = null;
+    }
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    if (!audioContext) await Tone.start();
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recordingStream = stream;
+        // 動態偵測格式
+        let mimeType = '';
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+            mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+            mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+            mimeType = 'audio/ogg;codecs=opus';
+        } else {
+            mimeType = '';
+        }
+        mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        recordedChunks = [];
+        mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+        mediaRecorder.onstop = handleRecordingStop;
+        mediaRecorder.start();
+        showRecordingIndicator();
+    } catch (err) {
+        ErrorHandler.showError('無法啟動錄音，請檢查麥克風權限或瀏覽器支援性。');
+    }
+}
+
+function showRecordingIndicator() {
+    if (recordingIndicator) recordingIndicator.remove();
+    recordingIndicator = document.createElement('div');
+    recordingIndicator.textContent = '● 錄音中...';
+    recordingIndicator.style = 'position:fixed;top:60px;right:30px;background:#d32f2f;color:white;padding:0.5em 1em;border-radius:8px;z-index:2000;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+    document.body.appendChild(recordingIndicator);
+}
+
+function hideRecordingIndicator() {
+    if (recordingIndicator) {
+        recordingIndicator.remove();
+        recordingIndicator = null;
+    }
+}
+
+function handleRecordingStop() {
+    hideRecordingIndicator();
+    if (userAudioUrl) URL.revokeObjectURL(userAudioUrl);
+    // 根據錄音格式產生 Blob
+    let mimeType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : 'audio/webm';
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    userAudioUrl = URL.createObjectURL(blob);
+
+    // 動態建立 audio 播放器
+    if (userAudioPlayer) userAudioPlayer.remove();
+    userAudioPlayer = document.createElement('audio');
+    userAudioPlayer.controls = true;
+    userAudioPlayer.src = userAudioUrl;
+    userAudioPlayer.style.marginTop = '1em';
+    document.getElementById('dashboard').appendChild(userAudioPlayer);
+    userAudioPlayer.play(); // 錄音結束自動播放
+
+    // 建立 A/B 對比按鈕
+    if (abCompareBtn) abCompareBtn.remove();
+    abCompareBtn = document.createElement('button');
+    abCompareBtn.textContent = 'A/B 對比（目前：我的錄音）';
+    abCompareBtn.style.marginLeft = '1em';
+    abCompareBtn.onclick = toggleABCompare;
+    document.getElementById('dashboard').appendChild(abCompareBtn);
+
+    abMode = 'user';
+
+    // 釋放麥克風資源
+    if (mediaRecorder && mediaRecorder.stream) {
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    }
+    if (recordingStream) {
+        recordingStream.getTracks().forEach(track => track.stop());
+        recordingStream = null;
+    }
+}
+
+function toggleABCompare() {
+    if (abMode === 'user') {
+        // 切換到原唱+伴奏
+        if (userAudioPlayer) userAudioPlayer.pause();
+        if (player) {
+            Tone.Transport.seconds = 0;
+            Tone.Transport.start();
+        }
+        abCompareBtn.textContent = 'A/B 對比（目前：原唱）';
+        abMode = 'original';
+    } else {
+        // 切換到用戶錄音+伴奏
+        if (player && Tone.Transport.state === 'started') Tone.Transport.stop();
+        if (userAudioPlayer) {
+            userAudioPlayer.currentTime = 0;
+            userAudioPlayer.play();
+        }
+        abCompareBtn.textContent = 'A/B 對比（目前：我的錄音）';
+        abMode = 'user';
+    }
+}
+
+function drawLoudnessCurve() {
+    if (!analyser) return;
+    const dataArray = new Float32Array(analyser.frequencyBinCount);
+    analyser.getFloatTimeDomainData(dataArray);
+    const rms = Math.sqrt(dataArray.reduce((acc, val) => acc + val * val, 0) / dataArray.length);
+
+    // 儲存歷史 RMS
+    rmsHistory.push(rms);
+    if (rmsHistory.length > canvas.width) rmsHistory.shift();
+
+    // 設定力度曲線區域（例如下方 1/3）
+    const yBase = canvas.height * 0.75;
+    const yMax = canvas.height * 0.95;
+    canvasCtx.save();
+    canvasCtx.beginPath();
+    for (let i = 0; i < rmsHistory.length; i++) {
+        const x = i;
+        // RMS 正規化到 0~1，並映射到 y 座標
+        const y = yMax - (rmsHistory[i] * (yMax - yBase) * 8); // 8 可調整靈敏度
+        if (i === 0) canvasCtx.moveTo(x, y);
+        else canvasCtx.lineTo(x, y);
+    }
+    canvasCtx.strokeStyle = '#ffbb33';
+    canvasCtx.lineWidth = 2;
+    canvasCtx.stroke();
+    canvasCtx.restore();
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    hideRecordingIndicator();
 }
