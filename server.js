@@ -390,13 +390,11 @@ app.use((error, req, res, next) => {
 async function startServer() {
     try {
         console.log('[+] 開始啟動 AI 音準資源製作器...');
-        
         // 驗證配置
         if (!validateConfig()) {
             console.error('[-] 配置驗證失敗，無法啟動伺服器');
             process.exit(1);
         }
-        
         console.log('[+] 正在建立 MySQL 資料庫連線池...');
         dbPool = mysql.createPool({ 
             host: config.db.host, 
@@ -416,8 +414,9 @@ async function startServer() {
         await connection.ping();
         connection.release();
         console.log('[✓] MySQL 資料庫連接成功！');
-        
-        app.listen(PORT, () => { 
+        // --- 關鍵：啟動 HTTP 服務 ---
+        app.listen(PORT, () => {
+            console.log(`✅ Server running on port ${PORT}`);
             console.log(`[✓] AI 資源製作器後端已啟動於 http://localhost:${PORT}`);
             console.log(`[✓] 環境: ${process.env.NODE_ENV || 'development'}`);
             console.log(`[✓] 檔案大小限制: ${config.limits.maxFileSize / 1024 / 1024}MB`);
