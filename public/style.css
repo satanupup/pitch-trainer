@@ -282,3 +282,5 @@ input[type="file"] { background-color: #fff; color: #333; }
         font-size: 1.2em;
     }
 }
+
+/* 其餘元件樣式請見 toast.css、dashboard.css、upload.css */

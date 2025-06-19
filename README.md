@@ -1,6 +1,104 @@
-# AI 音準資源製作器 v5.1.0
+# Pitch Trainer
 
-一個功能強大的 AI 音準訓練應用，結合了人聲分離、旋律提取、歌詞生成和即時音高偵測功能。
+## 專案簡介
+
+Pitch Trainer 是一套結合 AI 音準分析、歌唱練習、聲音品質分析與智慧教練回饋的全端應用。前端採用模組化 JavaScript，後端包含 Node.js 與 Python Flask 微服務。
+
+---
+
+## 目錄結構
+
+```
+public/
+  js/
+    main.js
+    modules/
+      api.js
+      audio.js
+      audioBuffer.js
+      errorHandler.js
+      loading.js
+      scoring.js
+      state.js
+      ui.js
+      utils.js
+      visualizer.js
+  style.css
+  index.html
+server.js
+services/
+  aiProcessingService.js
+analysis_service.py
+```
+
+---
+
+## 安裝與啟動
+
+### 1. 安裝 Node.js 依賴
+```bash
+npm install
+```
+
+### 2. 安裝 Python 依賴
+```bash
+pip install flask praat-parselmouth numpy
+```
+
+### 3. 啟動 Node.js 伺服器
+```bash
+node server.js
+```
+
+### 4. 啟動聲音分析微服務
+```bash
+python analysis_service.py
+```
+
+---
+
+## 前端模組化說明
+- 入口：`public/js/main.js`（App 類別）
+- 狀態管理：`modules/state.js`
+- API 通訊：`modules/api.js`
+- UI 操作：`modules/ui.js`
+- 音訊核心：`modules/audio.js`
+- Canvas 視覺化：`modules/visualizer.js`
+- 工具函數：`modules/utils.js`
+- 錯誤處理：`modules/errorHandler.js`
+- 其他：`modules/loading.js`, `modules/audioBuffer.js`, `modules/scoring.js`
+
+---
+
+## API 文件（Node.js）
+- `GET /songs`：取得歌曲清單
+- `POST /upload`：上傳歌曲檔案
+- `GET /status/:jobId`：查詢歌曲處理狀態
+
+## API 文件（Flask 分析微服務）
+- `POST /analyze_vocal`：上傳音檔，回傳聲音品質分析（平均基頻、Jitter、Shimmer、HNR）
+
+---
+
+## 開發建議
+- 前端請只引用 `js/main.js`，不要再引用 `script.js`
+- 新增功能請直接寫在對應模組
+- 工具函數請集中於 `utils.js`
+- CSS 可依元件拆分（見下方建議）
+
+---
+
+## CSS 拆分建議
+- `style.css`：全域樣式、版型
+- `toast.css`：彈窗訊息樣式
+- `dashboard.css`：音準練習主畫面
+- `upload.css`：上傳區塊
+
+---
+
+## 其他
+- 請確保 Python/Node.js 虛擬環境正確啟用
+- 如需 CI/CD、單元測試、API 文件自動化，請參考專案 issue
 
 ## 🎵 功能特色
 
