@@ -218,30 +218,36 @@ async function extractMidi(vocalPath, outputDir) {
     }
 }
 
-// 使用 Google Speech API 生成歌詞
+// 使用 Google Speech API 生成歌詞 (GCS 流程版本)
 async function generateLyrics(vocalPath, outputDir) {
-    console.log(`[+] 使用 Google Speech API 生成歌詞: ${vocalPath}`);
+    console.log(`[+] 使用 Google Speech API 生成歌詞 (GCS 流程): ${vocalPath}`);
     
     try {
-        // 先將音頻轉換為更適合語音識別的格式
+        // 1. 優化音頻
         const ffmpegPath = config.ai.ffmpegPath || 'ffmpeg';
         const optimizedAudioPath = path.join(outputDir, 'vocals_optimized.wav');
         
-        // 使用 FFmpeg 優化音頻：降噪、正規化音量、轉換為單聲道 16kHz
+        console.log(`[+] 步驟 1/6: 正在優化音訊...`);
         await execPromise(`${ffmpegPath} -i "${vocalPath}" -af "highpass=f=200,lowpass=f=3000,afftdn=nf=-25,dynaudnorm=f=150:g=15" -ac 1 -ar 16000 "${optimizedAudioPath}"`);
-        console.log(`[✓] 音頻優化完成: ${optimizedAudioPath}`);
+        console.log(`[✓] 音訊優化完成: ${optimizedAudioPath}`);
         
-        // 創建 Speech 客戶端 - 在 Google Cloud 環境中使用默認憑證
+        // 2. 準備 GCS 上傳
+        const BUCKET_NAME = config.google.storageBucket || 'pitch-trainer-bucket-961211674033';
+        const gcsFileName = `speech-audio-${Date.now()}.wav`;
+        const gcsUri = `gs://${BUCKET_NAME}/${gcsFileName}`;
+        
+        // 3. 創建 Storage 和 Speech 客戶端
+        const { Storage } = require('@google-cloud/storage');
+        const storage = new Storage();
+        
+        // 創建 Speech 客戶端
         let speechClient;
-        
-        // 檢查是否在 Google Cloud 環境中
         const isGoogleCloud = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
         
         if (isGoogleCloud) {
             console.log(`[i] 檢測到 Google Cloud 環境，使用默認憑證`);
-            speechClient = new SpeechClient();  // 使用默認憑證
+            speechClient = new SpeechClient();
         } else {
-            // 非 Google Cloud 環境，使用顯式憑證
             const keyFilePath = config.google.speechApiKeyFile || process.env.GOOGLE_APPLICATION_CREDENTIALS;
             console.log(`[i] 非 Google Cloud 環境，使用憑證文件: ${keyFilePath}`);
             
@@ -258,96 +264,108 @@ async function generateLyrics(vocalPath, outputDir) {
             });
         }
         
-        // 準備音頻文件
-        const audioBytes = await fs.readFile(optimizedAudioPath);
-        const audio = {
-            content: audioBytes.toString('base64'),
-        };
+        // 4. 上傳到 GCS
+        console.log(`[+] 步驟 2/6: 正在上傳檔案到 GCS: ${gcsUri}`);
+        await storage.bucket(BUCKET_NAME).upload(optimizedAudioPath, {
+            destination: gcsFileName,
+        });
+        console.log('[✓] 檔案上傳成功！');
         
-        // 配置識別請求 - 使用更適合歌曲識別的設置
-        const speechConfig = {
-            encoding: 'LINEAR16',
-            sampleRateHertz: 16000,
-            languageCode: 'zh-TW',  // 繁體中文
-            enableWordTimeOffsets: true,  // 啟用單詞時間戳
-            model: 'default',  // 使用標準模型
-            useEnhanced: true,  // 使用增強模型
-            profanityFilter: false,  // 不過濾髒話
-            enableAutomaticPunctuation: true,  // 啟用自動標點
-            maxAlternatives: 2,  // 獲取多個可能的結果
-            speechContexts: [{
-                phrases: ['歌詞', '音樂', '唱歌', '愛', '心', '你', '我', '他', '她', '想', '說', '走', '來', '去'],  // 添加更多常見歌詞詞彙
-                boost: 15  // 提高這些詞的權重
-            }],
-            audioChannelCount: 1,  // 單聲道
-        };
-        
+        // 5. 準備 GCS URI 請求
         const request = {
-            audio: audio,
-            config: speechConfig,
+            audio: { uri: gcsUri },
+            config: {
+                encoding: 'LINEAR16',
+                sampleRateHertz: 16000,
+                languageCode: 'zh-TW',
+                enableWordTimeOffsets: true,
+                useEnhanced: true,
+                enableAutomaticPunctuation: true,
+                maxAlternatives: 1,
+                speechContexts: [{
+                    phrases: ['歌詞', '音樂', '唱歌', '愛', '心', '你', '我', '他', '她', '想', '說', '走', '來', '去'],
+                    boost: 15
+                }],
+            },
         };
         
-        // 執行語音識別
-        console.log(`[+] 開始語音識別...`);
-        try {
-            const [response] = await speechClient.recognize(request);
-            console.log(`[i] 語音識別響應:`, JSON.stringify(response, null, 2));
+        // 6. 執行長時間識別
+        console.log('[+] 步驟 3/6: 呼叫長時間執行 API...');
+        const [operation] = await speechClient.longRunningRecognize(request);
+        console.log('[+] 步驟 4/6: 等待操作完成...');
+        const [response] = await operation.promise();
+        console.log('[✓] 長時間處理完成！');
+        
+        // 7. 處理識別結果
+        if (!response.results || response.results.length === 0) {
+            console.warn(`[!] 語音識別沒有返回結果，嘗試使用 Whisper 備用方案`);
             
-            // 檢查是否有識別結果
-            if (!response.results || response.results.length === 0) {
-                console.warn(`[!] 語音識別沒有返回結果，嘗試使用長音頻識別`);
-                return await generateLyricsLongAudio(optimizedAudioPath, outputDir, speechClient);
+            // 清理 GCS 檔案
+            try {
+                await storage.bucket(BUCKET_NAME).file(gcsFileName).delete();
+                console.log(`[✓] 已刪除 GCS 檔案: ${gcsUri}`);
+            } catch (e) {
+                console.warn(`[-] 刪除 GCS 檔案失敗: ${e.message}`);
             }
             
-            const transcription = response.results
-                .map(result => result.alternatives[0].transcript)
-                .join('\n');
-            
-            console.log(`[✓] 語音識別結果: ${transcription}`);
-            
-            // 使用 Gemini API 優化歌詞
-            const enhancedLyrics = await enhanceLyricsWithGemini(transcription);
-            console.log(`[✓] Gemini 優化後的歌詞: ${enhancedLyrics}`);
-            
-            // 生成 LRC 格式歌詞
-            let lrcContent = '';
-            
-            // 添加標題信息
-            lrcContent += '[ti:自動生成歌詞]\n';
-            lrcContent += '[ar:AI 生成]\n';
-            lrcContent += `[al:${path.basename(vocalPath, path.extname(vocalPath))}]\n`;
-            lrcContent += '[by:AI 音準資源製作器]\n\n';
-            
-            // 處理每個單詞的時間戳
-            response.results.forEach(result => {
-                const alternative = result.alternatives[0];
-                if (alternative.words && alternative.words.length > 0) {
-                    alternative.words.forEach(wordInfo => {
-                        const startTime = wordInfo.startTime.seconds + wordInfo.startTime.nanos / 1000000000;
-                        const minutes = Math.floor(startTime / 60);
-                        const seconds = startTime % 60;
-                        const timeCode = `[${minutes.toString().padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}]`;
-                        lrcContent += `${timeCode}${wordInfo.word}\n`;
-                    });
-                }
-            });
-            
-            // 保存原始 LRC 文件
-            const lrcPath = path.join(outputDir, 'lyrics.lrc');
-            await fs.writeFile(lrcPath, lrcContent);
-            console.log(`[✓] 歌詞文件已保存: ${lrcPath}`);
-            
-            // 保存 Gemini 優化後的歌詞
-            const enhancedLrcPath = path.join(outputDir, 'lyrics_enhanced.txt');
-            await fs.writeFile(enhancedLrcPath, enhancedLyrics);
-            console.log(`[✓] 優化後的歌詞文件已保存: ${enhancedLrcPath}`);
-            
-            return lrcPath;
-        } catch (apiError) {
-            console.error(`[-] Google Speech API 錯誤:`, apiError);
-            console.error(`[-] 錯誤詳情:`, JSON.stringify(apiError, null, 2));
-            throw apiError;
+            return await generateLyricsWithWhisper(vocalPath, outputDir);
         }
+        
+        // 提取完整文本
+        const transcription = response.results
+            .map(result => result.alternatives[0].transcript)
+            .join('\n');
+        
+        console.log(`[✓] 語音識別結果: ${transcription}`);
+        
+        // 8. 使用 Gemini API 優化歌詞
+        console.log('[+] 步驟 5/6: 使用 Gemini 優化歌詞...');
+        const enhancedLyrics = await enhanceLyricsWithGemini(transcription);
+        console.log(`[✓] Gemini 優化後的歌詞: ${enhancedLyrics}`);
+        
+        // 9. 生成 LRC 格式歌詞
+        let lrcContent = '';
+        
+        // 添加標題信息
+        lrcContent += '[ti:自動生成歌詞]\n';
+        lrcContent += '[ar:AI 生成]\n';
+        lrcContent += `[al:${path.basename(vocalPath, path.extname(vocalPath))}]\n`;
+        lrcContent += '[by:AI 音準資源製作器]\n\n';
+        
+        // 處理每個單詞的時間戳
+        response.results.forEach(result => {
+            const alternative = result.alternatives[0];
+            if (alternative.words && alternative.words.length > 0) {
+                alternative.words.forEach(wordInfo => {
+                    const startTime = wordInfo.startTime.seconds + wordInfo.startTime.nanos / 1000000000;
+                    const minutes = Math.floor(startTime / 60);
+                    const seconds = startTime % 60;
+                    const timeCode = `[${minutes.toString().padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}]`;
+                    lrcContent += `${timeCode}${wordInfo.word}\n`;
+                });
+            }
+        });
+        
+        // 10. 保存歌詞文件
+        const lrcPath = path.join(outputDir, 'lyrics.lrc');
+        await fs.writeFile(lrcPath, lrcContent);
+        console.log(`[✓] 歌詞文件已保存: ${lrcPath}`);
+        
+        // 保存 Gemini 優化後的歌詞
+        const enhancedLrcPath = path.join(outputDir, 'lyrics_enhanced.txt');
+        await fs.writeFile(enhancedLrcPath, enhancedLyrics);
+        console.log(`[✓] 優化後的歌詞文件已保存: ${enhancedLrcPath}`);
+        
+        // 11. 清理 GCS 和本地的暫存檔案
+        console.log('[+] 步驟 6/6: 正在清理暫存檔案...');
+        try {
+            await storage.bucket(BUCKET_NAME).file(gcsFileName).delete();
+            console.log(`[✓] 已刪除 GCS 檔案: ${gcsUri}`);
+        } catch (e) {
+            console.warn(`[-] 刪除 GCS 檔案失敗: ${e.message}`);
+        }
+        
+        return lrcPath;
     } catch (error) {
         console.error(`[-] 語音識別錯誤: ${error.message}`);
         console.error(`[-] 錯誤堆疊:`, error.stack);

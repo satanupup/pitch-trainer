@@ -31,9 +31,15 @@ const config = {
         uploads: 'uploads',
         tempProcessing: 'temp_processing',
         songs: 'public/songs'
+    },
+    google: {
+        speechApiKeyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS || './credentials/google-credentials.json',
+        storageBucket: process.env.GOOGLE_STORAGE_BUCKET || 'pitch-trainer-bucket-961211674033',
+        // 其他 Google 相關配置...
     }
 };
 
 module.exports = config;
+
 
 
