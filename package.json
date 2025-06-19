@@ -11,12 +11,20 @@
     "clean": "rm -rf temp_processing uploads",
     "backup": "mysqldump -u pitchuser -p pitch_trainer > backup_$(date +%Y%m%d_%H%M%S).sql"
   },
-  "keywords": ["music", "pitch", "training", "ai", "karaoke", "vocal"],
+  "keywords": [
+    "music",
+    "pitch",
+    "training",
+    "ai",
+    "karaoke",
+    "vocal"
+  ],
   "author": "AI Pitch Trainer Team",
   "license": "ISC",
   "description": "AI-powered pitch training application with real-time vocal analysis and scoring system",
   "dependencies": {
     "@google-cloud/speech": "^7.1.0",
+    "@google/generative-ai": "^0.24.1",
     "acrcloud": "^1.4.0",
     "axios": "^1.9.0",
     "cheerio": "^1.1.0",
