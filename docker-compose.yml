@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  pitch-trainer:
+    build: .
+    ports:
+      - "3001:3001"
+      - "5001:5001"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./temp_processing:/app/temp_processing
+      - ./public/songs:/app/public/songs
+    environment:
+      - DB_HOST=db
+      - DB_USER=pitchuser
+      - DB_PASSWORD=Mypa$$word123!
+      - DB_NAME=pitch_trainer
+      - SPLEETER_PATH=spleeter
+      - BASICPITCH_ENV=basicpitch-env
+      - FFMPEG_PATH=ffmpeg
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=pitch_trainer
+      - MYSQL_USER=pitchuser
+      - MYSQL_PASSWORD=Mypa$$word123!
+    restart: unless-stopped
+
+volumes:
+  mysql_data:

@@ -4,6 +4,32 @@
 
 Pitch Trainer 是一套結合 AI 音準分析、歌唱練習、聲音品質分析與智慧教練回饋的全端應用。前端採用模組化 JavaScript，後端包含 Node.js 與 Python Flask 微服務。
 
+## 🆕 最新更新 (v5.2.0)
+
+- **Docker 支持**: 新增 Docker 和 docker-compose 配置，簡化部署流程
+- **代碼質量改進**: 整合 ESLint，提高代碼質量
+- **自動化腳本優化**: 改進清理腳本，支持環境變數配置
+- **啟動腳本增強**: 更智能的服務啟動流程，自動處理端口衝突
+- **文檔更新**: 新增 Docker 部署指南
+
+## 🐳 Docker 快速啟動
+
+如果您已安裝 Docker 和 docker-compose，可以使用以下命令快速啟動整個應用：
+
+```bash
+# 克隆專案
+git clone <repository-url>
+cd pitch-trainer
+
+# 啟動服務
+docker-compose up -d
+
+# 查看日誌
+docker-compose logs -f
+```
+
+訪問 http://localhost:3001 即可使用應用。
+
 ---
 
 ## 目錄結構
