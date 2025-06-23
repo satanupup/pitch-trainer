@@ -50,18 +50,30 @@ function drawMidiNotes() {
 }
 
 function drawMicrophonePitch() {
-  if (state.analyser) {
-    const dataArray = new Float32Array(state.analyser.frequencyBinCount);
-    state.analyser.getFloatTimeDomainData(dataArray);
-    const rms = Math.sqrt(dataArray.reduce((acc, val) => acc + val * val, 0) / dataArray.length);
-    if (rms > 0.01) {
-      const frequency = getPitch(dataArray, state.audioContext.sampleRate);
-      if (frequency) {
-        const userNoteNumber = 12 * (Math.log(frequency / state.C0) / Math.log(2));
-        // ... 其餘 pitch 標記繪製 ...
-      }
-    }
-  }
+  if (!state.analyser) return;
+  
+  const dataArray = new Float32Array(state.analyser.frequencyBinCount);
+  state.analyser.getFloatTimeDomainData(dataArray);
+  
+  // 計算音量 RMS 值
+  const rms = calculateRMS(dataArray);
+  if (rms <= 0.01) return;
+  
+  // 獲取頻率
+  const frequency = getPitch(dataArray, state.audioContext.sampleRate);
+  if (!frequency) return;
+  
+  // 計算音符編號
+  const userNoteNumber = 12 * (Math.log(frequency / state.C0) / Math.log(2));
+  
+  // 繪製音高視覺效果
+  drawPitchVisuals(userNoteNumber);
+  
+  // 更新 UI 元素
+  updatePitchUI(userNoteNumber);
+  
+  // 評估音準
+  evaluatePitchAccuracy(userNoteNumber);
 }
 
 function drawLoudnessCurve() {
@@ -109,6 +121,60 @@ function getPitch(dataArray, sampleRate) {
     }
   }
   return bestOffset > 0 ? sampleRate / bestOffset : null;
+}
+
+// 計算 RMS 音量值
+function calculateRMS(dataArray) {
+  return Math.sqrt(dataArray.reduce((acc, val) => acc + val * val, 0) / dataArray.length);
+}
+
+// 繪製音高視覺效果
+function drawPitchVisuals(userNoteNumber) {
+  const y = mapNoteToY(userNoteNumber);
+  const x = canvas.width * 0.25; // 與播放頭位置一致
+  
+  // 繪製音高點
+  canvasCtx.fillStyle = '#33ff33';
+  canvasCtx.beginPath();
+  canvasCtx.arc(x, y, 5, 0, Math.PI * 2);
+  canvasCtx.fill();
+  
+  // 繪製水平線
+  canvasCtx.strokeStyle = 'rgba(51, 255, 51, 0.5)';
+  canvasCtx.lineWidth = 1;
+  canvasCtx.beginPath();
+  canvasCtx.moveTo(x - 15, y);
+  canvasCtx.lineTo(x + 15, y);
+  canvasCtx.stroke();
+}
+
+// 更新 UI 元素
+function updatePitchUI(userNoteNumber) {
+  const y = mapNoteToY(userNoteNumber);
+  
+  // 更新音高標記位置
+  state.elements?.userPitchMarker?.style.display = 'block';
+  if (state.elements?.userPitchMarker) {
+    state.elements.userPitchMarker.style.top = `${y}px`;
+  }
+  
+  // 更新音符顯示
+  if (state.elements?.keyValueDisplay) {
+    const midiNote = Math.round(userNoteNumber);
+    const noteName = midiToNote(midiNote);
+    state.elements.keyValueDisplay.textContent = noteName;
+  }
+}
+
+// 評估音準準確度
+function evaluatePitchAccuracy(userNoteNumber) {
+  if (!state.currentTargetNote || !state.scoring) return;
+  
+  const accuracy = state.scoring.evaluatePitch(userNoteNumber, state.currentTargetNote);
+  
+  if (accuracy !== null && state.elements?.accuracyDisplay) {
+    state.elements.accuracyDisplay.textContent = `${Math.round(accuracy)}%`;
+  }
 }
 
 export { init }; 

@@ -1,5 +1,10 @@
 class PitchScoring {
     constructor() {
+        this.initializeProperties();
+    }
+    
+    // 初始化或重置所有屬性
+    initializeProperties() {
         this.score = 0;
         this.totalNotes = 0;
         this.currentStreak = 0;
@@ -34,11 +39,8 @@ class PitchScoring {
         return Math.round(recent.reduce((a, b) => a + b, 0) / recent.length);
     }
     reset() {
-        this.score = 0;
-        this.totalNotes = 0;
-        this.currentStreak = 0;
-        this.bestStreak = 0;
-        this.accuracyHistory = [];
+        this.initializeProperties();
+        return this; // 支持鏈式調用
     }
 }
 
