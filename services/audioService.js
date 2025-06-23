@@ -307,13 +307,26 @@ async function generateLyricsWithGoogleSpeech(vocalPath, outputDir) {
     }
 }
 
-// 優化音頻以提高語音識別準確度
+/**
+ * 優化音頻以提高語音識別準確度
+ * @param {string} vocalPath - 人聲音訊檔案路徑
+ * @param {string} outputDir - 輸出目錄
+ * @returns {Promise<string>} - 優化後的音訊檔案路徑
+ */
 async function optimizeAudioForSpeechRecognition(vocalPath, outputDir) {
     const ffmpegPath = config.ai.ffmpegPath || 'ffmpeg';
     const optimizedAudioPath = path.join(outputDir, 'vocals_optimized.wav');
     
     console.log(`[+] 步驟 1/6: 正在優化音訊...`);
-    await execPromise(`${ffmpegPath} -i "${vocalPath}" -af "highpass=f=200,lowpass=f=3000,afftdn=nf=-25,dynaudnorm=f=150:g=15" -ac 1 -ar 16000 "${optimizedAudioPath}"`);
+    
+    // 使用更高級的音訊處理參數
+    // 1. highpass=f=200 - 去除低頻噪音
+    // 2. lowpass=f=3000 - 保留人聲頻率範圍
+    // 3. afftdn=nf=-25 - FFT 降噪
+    // 4. dynaudnorm=f=150:g=15 - 動態音量標準化
+    // 5. silenceremove - 移除靜音段落
+    await execPromise(`${ffmpegPath} -i "${vocalPath}" -af "highpass=f=200,lowpass=f=3000,afftdn=nf=-25,dynaudnorm=f=150:g=15,silenceremove=start_periods=1:start_duration=0.1:start_threshold=-60dB:detection=peak,aformat=sample_rates=16000" -ac 1 -ar 16000 "${optimizedAudioPath}"`);
+    
     console.log(`[✓] 音訊優化完成: ${optimizedAudioPath}`);
     
     return optimizedAudioPath;

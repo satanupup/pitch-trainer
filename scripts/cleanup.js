@@ -49,19 +49,21 @@ async function ensureDirectoryExists(dir) {
  * 清理單個目錄中的過期文件
  * @param {string} dir - 目錄路徑
  * @param {number} maxAgeMs - 最大保留時間(毫秒)
- * @returns {Promise<Object>} - 清理結果的 Promise，包含刪除的文件數和釋放的空間
+ * @param {Object} options - 額外選項
+ * @returns {Promise<Object>} - 清理結果，包含刪除的文件數和釋放的空間
  */
-async function cleanDirectory(dir, maxAgeMs) {
+async function cleanDirectory(dir, maxAgeMs, options = {}) {
   const now = Date.now();
   let cleaned = 0;
   let size = 0;
+  let skipped = 0;
   
   console.log(`[+] 開始清理目錄: ${dir}`);
   
   // 確保目錄存在
   const dirExists = await ensureDirectoryExists(dir);
   if (!dirExists) {
-    return { cleaned, size }; // 如果是新創建的目錄，則沒有文件需要清理
+    return { cleaned, size, skipped }; // 如果是新創建的目錄，則沒有文件需要清理
   }
   
   // 讀取目錄內容
@@ -77,6 +79,15 @@ async function cleanDirectory(dir, maxAgeMs) {
       continue;
     }
     
+    // 跳過保留的文件模式
+    if (options.keepPatterns?.some(pattern => {
+      const regex = new RegExp(pattern);
+      return regex.exec(file) !== null;
+    })) {
+      skipped++;
+      continue;
+    }
+    
     // 檢查檔案年齡
     const fileAge = now - stats.mtime.getTime();
     if (fileAge > maxAgeMs) {
@@ -87,8 +98,8 @@ async function cleanDirectory(dir, maxAgeMs) {
     }
   }
   
-  console.log(`[✓] 目錄清理完成: ${dir}`);
-  return { cleaned, size };
+  console.log(`[✓] 目錄清理完成: ${dir} (刪除: ${cleaned}, 跳過: ${skipped})`);
+  return { cleaned, size, skipped };
 }
 
 /**
@@ -117,6 +128,8 @@ cleanup().catch(err => {
   console.error('[-] 清理腳本執行失敗:', err);
   process.exit(1);
 });
+
+
 
 
 
