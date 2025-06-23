@@ -40,121 +40,63 @@ cp .env.example .env
 # 啟動服務
 docker-compose up -d
 
-# 查看日誌
-docker-compose logs -f
+# 訪問應用
+# 打開瀏覽器訪問 http://localhost:3001
 ```
 
-訪問 http://localhost:3001 即可使用應用。
-
-更多詳細說明請參考 [Docker 部署指南](./docs/docker.md)。
-
----
-
-## 目錄結構
+## 📁 專案結構
 
 ```
 pitch-trainer/
 ├── server.js              # 後端主程式
 ├── package.json           # 專案配置
 ├── config/                # 配置文件
-│   ├── config.js          # 主要配置
-│   ├── dbPool.js          # 資料庫連接池
-│   ├── init.js            # 初始化配置
-│   └── index.js           # 配置導出
 ├── services/              # 服務模組
-│   ├── audioService.js    # 音訊處理服務
-│   ├── fileService.js     # 檔案處理服務
-│   ├── songService.js     # 歌曲管理服務
-│   └── whisperService.js  # Whisper 歌詞服務
 ├── middleware/            # 中間件
-│   ├── authMiddleware.js  # 認證中間件
-│   ├── validationMiddleware.js # 驗證中間件
-│   └── performanceMonitor.js # 效能監控
 ├── public/                # 前端檔案
-│   ├── index.html         # 主頁面
-│   ├── style.css          # 樣式表
-│   ├── js/                # JavaScript 文件
-│   │   ├── main.js        # 主程式入口
-│   │   └── modules/       # 模組化組件
-│   │       ├── api.js     # API 通訊
-│   │       ├── audio.js   # 音訊處理
-│   │       └── ...        # 其他模組
-│   └── songs/             # 處理後的歌曲
 ├── docs/                  # 文檔模組
-│   ├── install.md         # 安裝指南
-│   ├── api.md             # API 文檔
-│   ├── db-schema.md       # 資料庫結構
-│   ├── features.md        # 功能說明
-│   ├── docker.md          # Docker 部署
-│   ├── lyrics-optimization.md # 歌詞優化指南
-│   └── troubleshooting.md # 故障排除
 ├── scripts/               # 腳本工具
-│   ├── cleanup.js         # 清理臨時文件
-│   └── setup.js           # 環境設置
 ├── tools/                 # 輔助工具
-│   ├── compare-stt-models.js # STT 模型比較
-│   └── whisper-fine-tune.md  # Whisper 微調指南
 ├── analysis_service.py    # Python 聲音分析微服務
-├── requirements.txt       # Python 依賴
-├── .env                   # 環境變數 (需自行建立)
-├── .env.example           # 環境變數範例
-├── .env.schema.json       # 環境變數結構定義
-├── uploads/               # 上傳檔案暫存
-├── temp_processing/       # 處理暫存檔案
-└── node_modules/          # 依賴套件
+└── ...
 ```
 
----
+## 📊 資料庫結構 (Database Schema)
 
-## 💾 資料庫結構 (Database Schema)
+### 主要資料表
 
-本專案使用 MySQL 資料庫，包含三個核心資料表：`songs`、`songs_meta` 和 `jobs`。
+#### songs 表
 
-### 資料表 `songs`
-儲存所有已成功處理完成的歌曲資源路徑。
+| 欄位名 | 類型 | 說明 |
+|--------|------|------|
+| `id` | INT PRIMARY KEY | 歌曲唯一識別碼 |
+| `name` | VARCHAR(255) | 歌曲名稱 |
+| `artist` | VARCHAR(255) | 歌手名稱 |
+| `original_file` | VARCHAR(255) | 原始檔案路徑 |
+| `vocal_file` | VARCHAR(255) | 人聲檔案路徑 |
+| `instrumental_file` | VARCHAR(255) | 伴奏檔案路徑 |
+| `midi_file` | VARCHAR(255) | MIDI 檔案路徑 |
+| `lyrics_file` | VARCHAR(255) | 歌詞檔案路徑 |
+| `status` | ENUM | 處理狀態 |
+| `created_at` | TIMESTAMP | 創建時間 |
+| `updated_at` | TIMESTAMP | 更新時間 |
 
-| 欄位名稱           | 資料類型      | 說明                               |
-| ------------------ | ------------- | ---------------------------------- |
-| `id`               | INT (PK, AI)  | 歌曲的唯一識別碼 (主鍵, 自動遞增)    |
-| `name`             | VARCHAR(255)  | 歌曲名稱 (通常由檔名淨化而來)      |
-| `mp3_path`         | VARCHAR(255)  | 原始完整歌曲的 MP3 檔案路徑        |
-| `vocal_path`       | VARCHAR(255)  | 分離後的人聲 MP3 檔案路徑          |
-| `accompaniment_path` | VARCHAR(255)  | 分離後的伴奏 MP3 檔案路徑          |
-| `midi_path`        | VARCHAR(255)  | 從人聲提取的旋律 MIDI 檔案路徑     |
-| `lrc_path`         | VARCHAR(255)  | 生成的 LRC 歌詞檔案路徑            |
-| `analysis_path`    | VARCHAR(255)  | 聲音品質分析結果的 JSON 檔案路徑   |
-| `created_at`       | TIMESTAMP     | 紀錄建立時間                       |
+#### jobs 表
 
-### 資料表 `songs_meta`
-儲存歌曲的元數據，用於進階功能和搜索。
-
-| 欄位名稱     | 資料類型      | 說明                         |
-| ------------ | ------------- | ---------------------------- |
-| `song_id`    | INT (PK, FK)  | 對應到 `songs` 表的 ID (主鍵) |
-| `artist`     | VARCHAR(255)  | 歌手名稱                     |
-| `language`   | VARCHAR(50)   | 歌曲語言                     |
-| `bpm`        | INT           | 每分鐘節拍數                 |
-| `key`        | VARCHAR(10)   | 歌曲調性                     |
-| `genre`      | VARCHAR(100)  | 歌曲類型                     |
-
-### 資料表 `jobs`
-用於追蹤每一個上傳檔案的處理進度與狀態，是實現非同步處理的核心。
-
-| 欄位名稱     | 資料類型                                       | 說明                                       |
-| ------------ | ---------------------------------------------- | ------------------------------------------ |
-| `id`         | VARCHAR(255) (PK)                              | 任務的唯一識別碼 (主鍵, 例如 'job_xxxxxxxx') |
-| `status`     | ENUM('pending','processing','completed','failed') | 任務目前的狀態                             |
-| `message`    | TEXT                                           | 顯示給使用者的狀態訊息或詳細的錯誤日誌     |
-| `progress`   | INT                                            | 處理進度百分比 (0-100)                     |
-| `song_id`    | INT (FK)                                       | 任務成功後，對應到 `songs` 資料表的 ID       |
-| `created_at` | TIMESTAMP                                      | 任務建立時間                               |
-| `updated_at` | TIMESTAMP                                      | 任務狀態最後更新時間                       |
+| 欄位名 | 類型 | 說明 |
+|--------|------|------|
+| `id` | INT PRIMARY KEY | 任務唯一識別碼 |
+| `song_id` | INT | 關聯的歌曲 ID |
+| `type` | ENUM | 任務類型 |
+| `status` | ENUM | 任務狀態 |
+| `progress` | INT | 進度百分比 |
+| `message` | TEXT | 狀態訊息 |
+| `created_at` | TIMESTAMP | 任務建立時間 |
+| `updated_at` | TIMESTAMP | 任務狀態最後更新時間 |
 
 更多詳細說明請參考 [資料庫結構文檔](./docs/db-schema.md)。
 
----
-
-## 安裝與啟動
+## 🚀 安裝與啟動
 
 ### 1. 安裝 Node.js 依賴
 ```bash
@@ -178,9 +120,7 @@ python analysis_service.py
 
 完整的安裝指南請參考 [安裝文檔](./docs/install.md)。
 
----
-
-## 架構說明
+## 🏗️ 架構說明
 
 本專案採用模組化架構，將功能分散到不同的服務和模組中：
 
@@ -194,9 +134,7 @@ python analysis_service.py
 - **Web Audio API**: 處理實時音訊分析和音高檢測
 - **Canvas 視覺化**: 繪製音符軌道和評分界面
 
----
-
-## 前端模組化說明
+## 📝 前端模組化說明
 - 入口：`public/js/main.js`（App 類別）
 - 狀態管理：`modules/state.js`
 - API 通訊：`modules/api.js`
@@ -205,47 +143,34 @@ python analysis_service.py
 - Canvas 視覺化：`modules/visualizer.js`
 - 工具函數：`modules/utils.js`
 - 錯誤處理：`modules/errorHandler.js`
-- 其他：`modules/loading.js`, `modules/audioBuffer.js`, `modules/scoring.js`
-
----
 
 ## 📖 API 文檔
 
 ### 端點列表
 
-| 方法 | 路徑 | 說明 |
+| 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/` | 首頁 |
-| GET | `/health` | 健康檢查 |
-| GET | `/songs` | 取得歌曲列表 |
-| GET | `/songs/:id` | 取得單首歌曲 |
-| POST | `/upload` | 上傳歌曲 |
-| GET | `/status/:jobId` | 查詢處理狀態 |
-| GET | `/lyrics/:id` | 獲取歌詞 |
-| GET | `/analysis/:id` | 獲取音高分析 |
-| DELETE | `/songs/:id` | 刪除歌曲 |
+| GET | `/api/songs` | 獲取所有歌曲 |
+| GET | `/api/songs/:id` | 獲取特定歌曲 |
+| POST | `/api/songs/upload` | 上傳新歌曲 |
+| GET | `/api/songs/:id/status` | 獲取處理狀態 |
+| GET | `/api/songs/:id/lyrics` | 獲取歌詞 |
 | PATCH | `/songs/:id/meta` | 更新歌曲元數據 |
 | POST | `/songs/:id/regenerate-lyrics` | 重新生成歌詞 |
 
 完整的 API 文檔請參考 [API 文檔](./docs/api.md)。
 
----
-
-## 開發建議
+## 💻 開發建議
 - 前端請只引用 `js/main.js`，不要再引用 `script.js`
 - 新增功能請直接寫在對應模組
 - 工具函數請集中於 `utils.js`
 - CSS 可依元件拆分（見下方建議）
 
----
-
-## CSS 拆分建議
+### CSS 拆分建議
 - `style.css`：全域樣式、版型
 - `toast.css`：彈窗訊息樣式
 - `dashboard.css`：音準練習主畫面
 - `upload.css`：上傳區塊
-
----
 
 ## 🎵 功能特色
 
@@ -350,8 +275,6 @@ python analysis_service.py
    docker-compose up -d
    ```
 
-這樣可以避免在代碼中硬編碼敏感信息。
-
 ## 📄 授權
 
 本專案採用 ISC 授權條款。
@@ -404,6 +327,14 @@ python analysis_service.py
 - **mysql2**: MySQL 連接器
 - **midi-parser-js**: MIDI 文件解析
 
+## 📊 性能指標
+
+- **上傳處理時間**: 平均 2-5 分鐘 (取決於歌曲長度)
+- **最大支持文件**: 100MB
+- **並發處理能力**: 單伺服器 5-10 個同時處理任務
+- **資料庫性能**: 支持數千首歌曲的管理
+- **API 響應時間**: 平均 < 200ms (不含處理任務)
+
 ## 🔄 更新日誌
 
 ### v5.2.0 (2024-03-01)
@@ -427,41 +358,7 @@ python analysis_service.py
 - 改進錯誤處理機制
 - 優化前端性能
 
-### v4.0.0 (2023-09-05)
-- 改進錯誤處理和響應格式
-- 新增健康檢查端點
-- 優化資源使用
-- 改進日誌系統
-- 新增效能監控
-
-### v3.0.0 (2023-06-10)
-- 添加歌詞重新生成功能
-- 支持多種語音識別模型
-- 改進音高檢測準確度
-- 新增批量處理功能
-- 優化用戶界面
-
-### v2.0.0 (2023-03-20)
-- 添加元數據和分析端點
-- 改進音頻處理流程
-- 新增聲音品質分析
-- 支持更多音頻格式
-- 優化資源使用
-
-### v1.0.0 (2023-01-15)
-- 初始版本發布
-- 基本音頻處理功能
-- 簡單的歌詞生成
-- 基礎用戶界面
-- 核心 API 端點
-
-## 📊 性能指標
-
-- **上傳處理時間**: 平均 2-5 分鐘 (取決於歌曲長度)
-- **最大支持文件**: 100MB
-- **並發處理能力**: 單伺服器 5-10 個同時處理任務
-- **資料庫性能**: 支持數千首歌曲的管理
-- **API 響應時間**: 平均 < 200ms (不含處理任務)
+更多版本歷史請查看 [更新日誌](./docs/changelog.md)。
 
 ## 🔮 未來計劃
 
