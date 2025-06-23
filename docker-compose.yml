@@ -30,10 +30,10 @@ services:
       - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-rootpassword}
       - MYSQL_DATABASE=pitch_trainer
       - MYSQL_USER=pitchuser
-      - MYSQL_PASSWORD=Mypa$$word123!
+      - MYSQL_PASSWORD=${DB_PASSWORD:-Mypa$$word123!}
     restart: unless-stopped
 
 volumes:

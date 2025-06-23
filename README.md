@@ -483,4 +483,26 @@ brew install ffmpeg
 
 ## 📞 支援
 
-如有問題，請提交 Issue 或聯繫開發團隊。 
+如有問題，請提交 Issue 或聯繫開發團隊。
+
+## 🔒 安全配置
+
+為了提高安全性，請在部署前執行以下步驟：
+
+1. 複製 `.env.example` 到 `.env`：
+   ```bash
+   cp .env.example .env
+   ```
+
+2. 在 `.env` 文件中設置安全的資料庫密碼：
+   ```
+   DB_ROOT_PASSWORD=your_secure_root_password
+   DB_PASSWORD=your_secure_user_password
+   ```
+
+3. 使用環境變數啟動 Docker：
+   ```bash
+   docker-compose up -d
+   ```
+
+這樣可以避免在代碼中硬編碼敏感信息。

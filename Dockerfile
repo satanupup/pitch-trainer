@@ -3,9 +3,11 @@ FROM node:18-slim
 
 # 安裝 Python 和其他依賴
 RUN apt-get update && apt-get install -y \
-    python3 python3-pip python3-venv \
     ffmpeg \
     mysql-client \
+    python3 \
+    python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # 設定工作目錄
