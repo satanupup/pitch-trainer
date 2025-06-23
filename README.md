@@ -10,12 +10,12 @@ Pitch Trainer 是一套結合 AI 音準分析、歌唱練習、聲音品質分�
 
 - [快速啟動（Docker）](#-docker-快速啟動)
 - [功能特色](#-功能特色)
-- [資料庫結構](#-資料庫結構-database-schema)
-- [API 文件](#-api-文檔)
-- [安裝教學（逐步）](#-給初學者的保姆級安裝教學)
+- [專案結構](#-專案結構)
+- [安裝教學](#-安裝與啟動)
 - [配置說明](#️-配置說明)
 - [故障排除](#-故障排除)
 - [技術棧](#-技術棧與依賴)
+- [貢獻指南](./CONTRIBUTING.md)
 
 ## 🆕 最新更新 (v5.2.0)
 
@@ -24,6 +24,8 @@ Pitch Trainer 是一套結合 AI 音準分析、歌唱練習、聲音品質分�
 - **自動化腳本優化**: 改進清理腳本，支持環境變數配置
 - **啟動腳本增強**: 更智能的服務啟動流程，自動處理端口衝突
 - **文檔更新**: 新增 Docker 部署指南與模組化文檔
+
+完整版本歷史請查看 [更新日誌](./docs/changelog.md)。
 
 ## 🐳 Docker 快速啟動
 
@@ -44,6 +46,8 @@ docker-compose up -d
 # 打開瀏覽器訪問 http://localhost:3001
 ```
 
+詳細的 Docker 部署說明請參考 [Docker 部署指南](./docs/docker.md)。
+
 ## 📁 專案結構
 
 ```
@@ -60,41 +64,6 @@ pitch-trainer/
 ├── analysis_service.py    # Python 聲音分析微服務
 └── ...
 ```
-
-## 📊 資料庫結構 (Database Schema)
-
-### 主要資料表
-
-#### songs 表
-
-| 欄位名 | 類型 | 說明 |
-|--------|------|------|
-| `id` | INT PRIMARY KEY | 歌曲唯一識別碼 |
-| `name` | VARCHAR(255) | 歌曲名稱 |
-| `artist` | VARCHAR(255) | 歌手名稱 |
-| `original_file` | VARCHAR(255) | 原始檔案路徑 |
-| `vocal_file` | VARCHAR(255) | 人聲檔案路徑 |
-| `instrumental_file` | VARCHAR(255) | 伴奏檔案路徑 |
-| `midi_file` | VARCHAR(255) | MIDI 檔案路徑 |
-| `lyrics_file` | VARCHAR(255) | 歌詞檔案路徑 |
-| `status` | ENUM | 處理狀態 |
-| `created_at` | TIMESTAMP | 創建時間 |
-| `updated_at` | TIMESTAMP | 更新時間 |
-
-#### jobs 表
-
-| 欄位名 | 類型 | 說明 |
-|--------|------|------|
-| `id` | INT PRIMARY KEY | 任務唯一識別碼 |
-| `song_id` | INT | 關聯的歌曲 ID |
-| `type` | ENUM | 任務類型 |
-| `status` | ENUM | 任務狀態 |
-| `progress` | INT | 進度百分比 |
-| `message` | TEXT | 狀態訊息 |
-| `created_at` | TIMESTAMP | 任務建立時間 |
-| `updated_at` | TIMESTAMP | 任務狀態最後更新時間 |
-
-更多詳細說明請參考 [資料庫結構文檔](./docs/db-schema.md)。
 
 ## 🚀 安裝與啟動
 
@@ -124,6 +93,25 @@ python analysis_service.py
 
 本專案採用模組化架構，將功能分散到不同的服務和模組中：
 
+```mermaid
+graph TD
+    Client[瀏覽器客戶端] --> |HTTP/WebSocket| NodeJS[Node.js 主服務]
+    NodeJS --> |REST API| Python[Python 分析微服務]
+    NodeJS --> |SQL| DB[(MySQL 資料庫)]
+    Python --> |AI 處理| Models[AI 模型]
+    Models --> |人聲分離| Spleeter[Spleeter]
+    Models --> |音高檢測| BasicPitch[Basic Pitch]
+    Models --> |語音識別| Whisper[Whisper/Google STT]
+    Models --> |聲音品質| Praat[Praat-Parselmouth]
+    Models --> |歌詞優化| Gemini[Gemini AI]
+    
+    subgraph 前端模組
+    Client --> AudioModule[音訊處理模組]
+    Client --> UIModule[UI 互動模組]
+    Client --> VisualizerModule[視覺化模組]
+    end
+```
+
 ### 後端架構
 - **主服務 (Node.js)**: 處理 HTTP 請求、檔案上傳和資料庫操作
 - **分析微服務 (Python Flask)**: 處理音訊分析、音高檢測等 CPU 密集型任務
@@ -146,19 +134,11 @@ python analysis_service.py
 
 ## 📖 API 文檔
 
-### 端點列表
+API 端點的完整說明、請求參數和響應格式，請參考 [API 文檔](./docs/api.md)。
 
-| 方法 | 端點 | 說明 |
-|------|------|------|
-| GET | `/api/songs` | 獲取所有歌曲 |
-| GET | `/api/songs/:id` | 獲取特定歌曲 |
-| POST | `/api/songs/upload` | 上傳新歌曲 |
-| GET | `/api/songs/:id/status` | 獲取處理狀態 |
-| GET | `/api/songs/:id/lyrics` | 獲取歌詞 |
-| PATCH | `/songs/:id/meta` | 更新歌曲元數據 |
-| POST | `/songs/:id/regenerate-lyrics` | 重新生成歌詞 |
+## 📊 資料庫結構
 
-完整的 API 文檔請參考 [API 文檔](./docs/api.md)。
+資料庫包含三個主要資料表：`songs`、`songs_meta` 和 `jobs`。完整的資料庫結構、關聯關係和索引說明，請參考 [資料庫結構文檔](./docs/db-schema.md)。
 
 ## 💻 開發建議
 - 前端請只引用 `js/main.js`，不要再引用 `script.js`
@@ -193,19 +173,6 @@ python analysis_service.py
 
 更多功能說明請參考 [功能特色文檔](./docs/features.md)。
 
-## 🚀 給初學者的保姆級安裝教學
-
-### 階段〇：安裝必備軟體 (一切的基礎)
-
-在開始之前，請確保您的電腦上已經安裝了以下四個軟體：
-
-1. **Git**: [點此下載](https://git-scm.com/downloads) (用於從 GitHub 下載專案程式碼)。
-2. **Node.js**: [點此下載](https://nodejs.org/en/) (建議下載 LTS 版本，用於執行前端和後端主服務)。
-3. **Miniconda**: [點此下載](https://docs.conda.io/en/latest/miniconda.html) (用於建立和管理 `basic-pitch` 需要的獨立 Python 環境)。
-4. **MySQL Server**: [官方下載頁面](https://dev.mysql.com/downloads/mysql/) (用於儲存歌曲資料，安裝時請務必記下您設定的 `root` 使用者密碼)。
-
-完整的安裝教學請參考 [安裝指南](./docs/install.md)。
-
 ## ⚙️ 配置說明
 
 ### 環境變數
@@ -228,6 +195,8 @@ python analysis_service.py
 | `MAX_FILE_SIZE` | 最大檔案大小 (bytes) | 104857600 (100MB) |
 | `RATE_LIMIT_MAX` | 速率限制次數 | 5 |
 | `RATE_LIMIT_WINDOW` | 速率限制時間窗 (ms) | 900000 (15分鐘) |
+
+完整的配置說明請參考 [配置文檔](./docs/configuration.md)。
 
 ## 🔧 故障排除
 
@@ -281,11 +250,11 @@ python analysis_service.py
 
 ## 🤝 貢獻
 
-歡迎提交 Issue 和 Pull Request！
+我們歡迎各種形式的貢獻，包括功能請求、錯誤報告、代碼貢獻和文檔改進。請查看 [貢獻指南](./CONTRIBUTING.md) 了解如何參與專案開發。
 
 ## 📞 支援
 
-如有問題，請提交 Issue 或聯繫開發團隊。
+如有問題，請提交 [Issue](https://github.com/your-username/pitch-trainer/issues) 或聯繫開發團隊。
 
 ## 🧠 技術棧與依賴
 
@@ -334,31 +303,6 @@ python analysis_service.py
 - **並發處理能力**: 單伺服器 5-10 個同時處理任務
 - **資料庫性能**: 支持數千首歌曲的管理
 - **API 響應時間**: 平均 < 200ms (不含處理任務)
-
-## 🔄 更新日誌
-
-### v5.2.0 (2024-03-01)
-- 新增 Docker 和 docker-compose 配置
-- 整合 ESLint 提高代碼質量
-- 改進清理腳本，支持環境變數配置
-- 更智能的服務啟動流程，自動處理端口衝突
-- 新增 Docker 部署指南與模組化文檔
-
-### v5.1.0 (2024-01-15)
-- 升級 Gemini API 至 1.5 版本
-- 改進歌詞優化算法
-- 新增歌詞時間碼對齊功能
-- 優化音頻處理流程
-- 修復多個 UI 問題
-
-### v5.0.0 (2023-12-15)
-- 添加認證和速率限制
-- 重構資料庫結構
-- 新增元數據管理功能
-- 改進錯誤處理機制
-- 優化前端性能
-
-更多版本歷史請查看 [更新日誌](./docs/changelog.md)。
 
 ## 🔮 未來計劃
 

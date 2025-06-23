@@ -1,0 +1,62 @@
+# 版本控制
+.git
+.gitignore
+.github
+
+# 編輯器配置
+.vscode
+.idea
+*.swp
+*.swo
+
+# 依賴目錄
+node_modules
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+analysis_venv/
+
+# 日誌文件
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+*.log
+
+# 環境變數和敏感信息
+.env
+.env.*
+*.pem
+*.key
+
+# 文檔和說明文件
+README.md
+CONTRIBUTING.md
+docs/
+*.md
+
+# 測試文件
+test/
+tests/
+coverage/
+
+# 臨時文件和緩存
+.tmp
+.temp
+.cache
+temp_processing/
+uploads/
+
+# 構建產物
+dist/
+build/
+*.tar.gz
+*.zip
+
+# 系統文件
+.DS_Store
+Thumbs.db

@@ -4,19 +4,35 @@
 
 ## 基本信息
 
-- **基礎 URL**: `http://localhost:3001` (開發環境)
+- **基礎 URL**: `http://localhost:3001/api/v1` (開發環境)
 - **內容類型**: 所有請求和響應均使用 JSON 格式 (`application/json`)
-- **認證**: 部分端點可能需要 API 金鑰或 JWT 令牌
+- **認證**: 使用 Bearer Token 認證 (`Authorization: Bearer <token>`)
+
+## 認證
+
+需要認證的端點要求在請求頭中包含有效的 JWT 令牌：
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+或者使用 API 金鑰：
+
+```
+X-API-Key: your-api-key
+```
 
 ## 端點列表
 
 ### 健康檢查
 
 ```
-GET /health
+GET /api/v1/health
 ```
 
 檢查服務是否正常運行。
+
+**認證**: 不需要
 
 **響應**:
 
@@ -31,10 +47,12 @@ GET /health
 ### 獲取歌曲列表
 
 ```
-GET /songs
+GET /api/v1/songs
 ```
 
 獲取所有已處理的歌曲列表。
+
+**認證**: 不需要
 
 **查詢參數**:
 
@@ -71,10 +89,12 @@ GET /songs
 ### 獲取單首歌曲
 
 ```
-GET /songs/:id
+GET /api/v1/songs/:id
 ```
 
 獲取指定 ID 的歌曲詳細信息。
+
+**認證**: 不需要
 
 **路徑參數**:
 
@@ -108,10 +128,12 @@ GET /songs/:id
 ### 上傳歌曲
 
 ```
-POST /upload
+POST /api/v1/songs
 ```
 
 上傳新歌曲進行處理。
+
+**認證**: 需要
 
 **請求**:
 
@@ -137,10 +159,12 @@ POST /upload
 ### 查詢處理狀態
 
 ```
-GET /status/:jobId
+GET /api/v1/jobs/:jobId
 ```
 
 查詢歌曲處理任務的狀態。
+
+**認證**: 需要
 
 **路徑參數**:
 
@@ -179,10 +203,12 @@ GET /status/:jobId
 ### 獲取歌詞
 
 ```
-GET /lyrics/:id
+GET /api/v1/songs/:id/lyrics
 ```
 
 獲取指定歌曲的 LRC 格式歌詞。
+
+**認證**: 不需要
 
 **路徑參數**:
 
@@ -202,10 +228,12 @@ GET /lyrics/:id
 ### 獲取音高分析
 
 ```
-GET /analysis/:id
+GET /api/v1/songs/:id/analysis
 ```
 
 獲取指定歌曲的音高分析數據。
+
+**認證**: 不需要
 
 **路徑參數**:
 
@@ -234,10 +262,12 @@ GET /analysis/:id
 ### 刪除歌曲
 
 ```
-DELETE /songs/:id
+DELETE /api/v1/songs/:id
 ```
 
 刪除指定 ID 的歌曲及其相關資源。
+
+**認證**: 需要
 
 **路徑參數**:
 
@@ -257,10 +287,12 @@ DELETE /songs/:id
 ### 更新歌曲元數據
 
 ```
-PATCH /songs/:id/meta
+PATCH /api/v1/songs/:id
 ```
 
 更新指定歌曲的元數據。
+
+**認證**: 需要
 
 **路徑參數**:
 
@@ -304,10 +336,12 @@ PATCH /songs/:id/meta
 ### 重新生成歌詞
 
 ```
-POST /songs/:id/regenerate-lyrics
+POST /api/v1/songs/:id/regenerate-lyrics
 ```
 
 使用不同的模型重新生成歌曲歌詞。
+
+**認證**: 需要
 
 **路徑參數**:
 
@@ -362,14 +396,14 @@ POST /songs/:id/regenerate-lyrics
 
 為防止濫用，API 實施了速率限制：
 
-- 上傳端點 (`/upload`): 每 15 分鐘最多 5 次請求
+- 上傳端點 (`/api/v1/songs`): 每 15 分鐘最多 5 次請求
 - 其他端點: 每分鐘最多 60 次請求
 
 超過限制時，服務器將返回 `429 Too Many Requests` 錯誤。
 
 ## 認證
 
-某些端點可能需要認證。認證通過 Bearer 令牌實現：
+某些端點需要認證。認證通過 Bearer 令牌實現：
 
 ```
 Authorization: Bearer <your-token>
@@ -381,7 +415,8 @@ Authorization: Bearer <your-token>
 
 ```bash
 curl -X POST \
-  http://localhost:3001/upload \
+  http://localhost:3001/api/v1/songs \
+  -H "Authorization: Bearer your-token" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@/path/to/song.mp3" \
   -F "name=我的歌曲" \
@@ -391,7 +426,7 @@ curl -X POST \
 ### 使用 JavaScript 獲取歌曲列表
 
 ```javascript
-fetch('http://localhost:3001/songs?limit=10&offset=0')
+fetch('http://localhost:3001/api/v1/songs?limit=10&offset=0')
   .then(response => response.json())
   .then(data => console.log(data))
   .catch(error => console.error('Error:', error));
@@ -403,7 +438,8 @@ fetch('http://localhost:3001/songs?limit=10&offset=0')
 import requests
 
 job_id = "job_1621234567890"
-response = requests.get(f"http://localhost:3001/status/{job_id}")
+headers = {"Authorization": "Bearer your-token"}
+response = requests.get(f"http://localhost:3001/api/v1/jobs/{job_id}", headers=headers)
 print(response.json())
 ```
 
@@ -417,3 +453,5 @@ print(response.json())
 | v4.0 | 2023-09-05 | 改進錯誤處理和響應格式 |
 | v5.0 | 2023-12-15 | 添加認證和速率限制 |
 | v5.2.0 | 2024-03-01 | 優化處理流程和 Docker 支持 |
+| v6.0.0 | 2024-05-15 | 重構 API 路徑，統一為 RESTful 風格 |
+

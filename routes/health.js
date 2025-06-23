@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { checkHealth } = require('../services/songService');
+const { version } = require('../package.json');
 
-router.get('/', async (req, res) => {
-    try {
-        const health = await checkHealth();
-        res.json(health);
-    } catch (error) {
-        res.status(503).json({ status: 'unhealthy', error: error.message });
-    }
+// 健康檢查端點
+router.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    version: version,
+    timestamp: Date.now()
+  });
 });
 
 module.exports = router;

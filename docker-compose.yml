@@ -1,11 +1,13 @@
 version: '3.8'
 
 services:
-  pitch-trainer:
-    build: .
+  backend-node:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    container_name: pitch-trainer-node
     ports:
       - "3001:3001"
-      - "5001:5001"
     volumes:
       - ./uploads:/app/uploads
       - ./temp_processing:/app/temp_processing
@@ -13,14 +15,34 @@ services:
     environment:
       - DB_HOST=db
       - DB_USER=pitchuser
-      - DB_PASSWORD=Mypa$$word123!
+      - DB_PASSWORD=${DB_PASSWORD:-Mypa$$word123!}
       - DB_NAME=pitch_trainer
+      - ANALYSIS_SERVICE_URL=http://analysis-python:5001
+    depends_on:
+      - db
+      - analysis-python
+    restart: unless-stopped
+    networks:
+      - pitch-network
+
+  analysis-python:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: pitch-trainer-python
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./temp_processing:/app/temp_processing
+    environment:
       - SPLEETER_PATH=spleeter
       - BASICPITCH_ENV=basicpitch-env
       - FFMPEG_PATH=ffmpeg
-    depends_on:
-      - db
+      - FLASK_PORT=5001
     restart: unless-stopped
+    networks:
+      - pitch-network
 
   db:
     image: mysql:8.0
@@ -35,6 +57,13 @@ services:
       - MYSQL_USER=pitchuser
       - MYSQL_PASSWORD=${DB_PASSWORD:-Mypa$$word123!}
     restart: unless-stopped
+    networks:
+      - pitch-network
 
 volumes:
   mysql_data:
+
+networks:
+  pitch-network:
+    driver: bridge
+

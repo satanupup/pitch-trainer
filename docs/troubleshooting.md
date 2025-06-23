@@ -2,6 +2,45 @@
 
 本文檔提供 Pitch Trainer 應用程式常見問題的故障排除步驟和解決方案。
 
+## 快速診斷
+
+### 使用健康檢查端點
+
+**第一步**：在遇到任何問題時，請先訪問健康檢查端點來確認服務狀態：
+
+```
+GET http://localhost:3001/api/v1/health
+```
+
+正常響應應該是：
+
+```json
+{
+  "status": "ok",
+  "version": "5.2.0",
+  "timestamp": 1621234567890,
+  "services": {
+    "database": "connected",
+    "analysis_service": "available",
+    "storage": "ok"
+  }
+}
+```
+
+如果響應中任何服務狀態不是正常值，請參考下方對應的故障排除部分。
+
+### 檢查日誌
+
+同時查看應用日誌以獲取更詳細的錯誤信息：
+
+```bash
+# Node.js 服務日誌
+tail -f logs/app.log
+
+# Python 分析服務日誌
+tail -f logs/analysis.log
+```
+
 ## 目錄
 
 - [安裝問題](#安裝問題)
